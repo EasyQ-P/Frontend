@@ -26,7 +26,26 @@ npm run dev                  # http://localhost:3000
 | 이름 | 설명 |
 |---|---|
 | `NEXT_PUBLIC_DEMO` | `true`면 시연용 요소(데모 버튼 · 예시 코드 등)를 보여 줍니다. 기본값은 숨김 |
-| `NEXT_PUBLIC_API_BASE_URL` | 백엔드 API 주소 (연동 시 사용 예정) |
+| `API_PROXY_TARGET` | 로컬 개발 전용. `/api/v1` 요청을 넘길 backend 주소 (예: `http://localhost:8000`) |
+| `AUTH_PROXY_TARGET` | 로컬 개발 전용. auth 경로(`/api/v1/users` · `/api/v1/auth/*` · `/api/v1/me`)를 넘길 주소. 비우면 `API_PROXY_TARGET`으로 보냄 |
+
+브라우저는 항상 같은 출처의 `/api/v1`만 호출합니다. 운영에서는 Caddy가 경로별로 auth · backend에 나눠 보내므로 API 주소 환경변수가 필요 없습니다. 로컬에서는 Caddy가 없으니 Next.js 개발 서버가 같은 규칙으로 대신 넘겨 줍니다([next.config.ts](next.config.ts)).
+
+## API 호출
+
+[lib/api/client.ts](lib/api/client.ts)의 `api`로 호출합니다. 공통 응답에서 `data`만 꺼내 주고, 실패하면 `ApiError`(`status` · `code` · `retryable` 등)를 던집니다.
+
+```ts
+import { api } from "@/lib/api/client";
+
+const session = await api.get<Session>(`/sessions/${sid}`);
+await api.patch(`/sessions/${sid}`, { status: "LIVE" }, { ifMatch: session.version });
+await api.post(`/sessions/${sid}/documents/${did}/retries`, undefined, { idempotencyKey: true });
+```
+
+- 변경 요청에는 CSRF 토큰을 자동으로 붙입니다. 토큰은 메모리에만 두고, 없으면 `/auth/csrf-tokens`로 다시 받습니다.
+- 가입 · 로그인 · 입장처럼 로그인 전에 부르는 API는 `{ csrf: false }`를 넘깁니다.
+- 기능별 함수는 `lib/api/<이름>.ts`에 둡니다 (예: [lib/api/auth.ts](lib/api/auth.ts)).
 
 ## 화면
 
@@ -54,6 +73,7 @@ npm run dev                  # http://localhost:3000
 app/         페이지 (라우트별 폴더)
 components/  공통 컴포넌트 (UI 기본 요소 · 아이콘 · QR · 요약 노트 등)
 lib/
+  api/       API 클라이언트 · 응답 타입 · 기능별 호출 함수
   mock.ts    목업 데이터 → API 연동 시 실제 호출로 대체
   store.ts   페이지 이동 사이에 유지되는 클라이언트 상태
   auth.ts    로그인 · 비밀번호 검증 (현재 목업)
