@@ -61,6 +61,14 @@ lib/
   demo.ts    데모 모드 플래그 (NEXT_PUBLIC_DEMO)
 ```
 
+## 브랜치
+
+| 브랜치 | 용도 |
+|---|---|
+| `main` | 배포용. `develop`에서 검증된 것만 합칩니다 |
+| `develop` | 개발 통합. 기능 브랜치는 여기서 만들고 여기로 PR을 보냅니다 |
+| `feature/<이름>` | 기능 작업 (예: `feature/api-auth`) |
+
 ## 참고
 
 `AGENTS.md`는 `next dev`가 자동으로 만드는 파일입니다. 지우지 말고 그대로 두세요.
