@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sticker } from "@/components/Brand";
 import { Button, Field, Screen, TopBar, inputCls, useToast } from "@/components/ui";
+import { requestReset } from "@/lib/account";
 import { EMAIL_RE } from "@/lib/auth";
 import { DEMO } from "@/lib/demo";
 
@@ -11,13 +12,24 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const toast = useToast();
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     if (!EMAIL_RE.test(email.trim())) return setError("이메일 형식이 올바르지 않아요.");
+    setLoading(true);
+    const res = await requestReset(email);
+    setLoading(false);
+    if (!res.ok) return setError(res.message);
     setError("");
     setSent(true);
+  }
+
+  async function resend() {
+    const res = await requestReset(email);
+    toast.show(res.ok ? "재설정 메일을 다시 보냈어요" : res.message);
   }
 
   if (sent)
@@ -42,7 +54,7 @@ export default function ForgotPassword() {
                 메일의 링크 열기 (데모)
               </Button>
             )}
-            <Button variant="white" size="lg" className="w-full" onClick={() => toast.show("재설정 메일을 다시 보냈어요")}>
+            <Button variant="white" size="lg" className="w-full" onClick={resend}>
               메일 다시 보내기
             </Button>
           </div>
@@ -81,8 +93,8 @@ export default function ForgotPassword() {
           </Field>
         </div>
         <div className="mt-auto pb-10 pt-8">
-          <Button size="lg" className="w-full" type="submit" disabled={!email.trim()}>
-            재설정 링크 보내기
+          <Button size="lg" className="w-full" type="submit" disabled={!email.trim() || loading}>
+            {loading ? "보내는 중…" : "재설정 링크 보내기"}
           </Button>
         </div>
       </form>

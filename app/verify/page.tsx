@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { Button, Screen, TopBar, useToast } from "@/components/ui";
+import { confirmEmail, resendEmail } from "@/lib/account";
 import { MOCK_VERIFY_CODE } from "@/lib/auth";
 import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo } from "@/lib/store";
@@ -30,6 +31,7 @@ function Verify() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [left, setLeft] = useState(RESEND_SEC);
   const [resent, setResent] = useState(0);
   const resendBlocked = resent >= RESEND_MAX;
@@ -43,19 +45,21 @@ function Verify() {
     return () => clearTimeout(t);
   }, [left]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (code.length < LENGTH) return;
-    if (code !== MOCK_VERIFY_CODE) {
-      setError("인증 코드가 맞지 않아요. 메일의 6자리 코드를 다시 확인해 주세요.");
-      return;
-    }
+    if (code.length < LENGTH || loading) return;
+    setLoading(true);
+    const res = await confirmEmail(email, code);
+    setLoading(false);
+    if (!res.ok) return setError(res.message);
     if (signup && signup.email === email) setDemo({ signup: { ...signup, verified: true } });
     setDone(true);
   }
 
-  function resend() {
+  async function resend() {
     if (resendBlocked) return;
+    const res = await resendEmail(email);
+    if (!res.ok) return setError(res.message);
     setResent((n) => n + 1);
     setLeft(RESEND_SEC);
     setCode("");
@@ -148,8 +152,8 @@ function Verify() {
         {DEMO && <p className="mt-3 text-xs text-muted">데모 인증 코드 · {MOCK_VERIFY_CODE}</p>}
 
         <div className="mt-auto pb-10 pt-8">
-          <Button size="lg" className="w-full" type="submit" disabled={code.length < LENGTH}>
-            인증하기
+          <Button size="lg" className="w-full" type="submit" disabled={code.length < LENGTH || loading}>
+            {loading ? "확인 중…" : "인증하기"}
           </Button>
         </div>
       </form>

@@ -17,6 +17,12 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async redirects() {
+    return [
+      // 백엔드 재설정 메일 링크(/reset-password#token=…)를 재설정 화면으로. 브라우저가 #token은 그대로 붙여 준다
+      { source: "/reset-password", destination: "/password/reset", permanent: false },
+    ];
+  },
   async rewrites() {
     if (!backend || !auth) return [];
     // 위에서부터 먼저 맞는 규칙이 적용된다. auth 경로를 backend 전체 규칙보다 먼저 둔다
