@@ -11,8 +11,6 @@ export default function Splash() {
           <span className="text-right text-sm leading-tight">
             <span className="mr-1 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-coral" />
             강연 질문 서비스
-            <br />
-            <span className="text-muted">가천대 실무프로젝트</span>
           </span>
         </div>
 
