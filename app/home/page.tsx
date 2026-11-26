@@ -6,6 +6,7 @@ import { Icon } from "@/components/Icon";
 import { RoundButton, Screen } from "@/components/ui";
 import { archive, lectures, statusOf, tones } from "@/lib/mock";
 import { useDemo } from "@/lib/store";
+import { useToday } from "@/lib/useToday";
 
 export default function Home() {
   const { name, deletedArchives, endedLectures, startedLectures } = useDemo();
@@ -15,6 +16,7 @@ export default function Home() {
   const myArchive = archive.filter((a) => !deletedArchives.includes(a.id));
   const recent = myArchive.slice(0, 3);
   const notes = myArchive.filter((a) => a.summary === "ready").length;
+  const today = useToday();
 
   return (
     <Screen nav dark width="wide">
@@ -25,9 +27,10 @@ export default function Home() {
             <h1 className="text-[44px] font-extrabold leading-none tracking-[-0.05em] md:text-[56px]">오늘</h1>
             <p className="pt-1 text-right text-[15px] leading-tight">
               <span className="mr-1.5 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-coral" />
-              10월 22일
+              {/* 날짜를 읽기 전에는 자리만 잡아 둔다 */}
+              {today ? `${today.month}월 ${today.day}일` : "\u00a0"}
               <br />
-              <span className="text-white/45">목요일</span>
+              <span className="text-white/45">{today?.weekday ?? "\u00a0"}</span>
             </p>
           </div>
 
