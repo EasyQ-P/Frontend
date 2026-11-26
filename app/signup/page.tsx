@@ -5,7 +5,9 @@ import { useState } from "react";
 import { Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { Button, Field, Screen, TopBar, inputCls } from "@/components/ui";
+import { signup } from "@/lib/account";
 import { EMAIL_RE, pwRules as rules, pwValid } from "@/lib/auth";
+import { DEMO } from "@/lib/demo";
 import { LEARN_CONSENT_TEXT } from "@/lib/mock";
 import { setDemo } from "@/lib/store";
 
@@ -23,17 +25,29 @@ export default function Signup() {
   const [pw, setPw] = useState("");
   const [agree, setAgree] = useState<Record<string, boolean>>({});
   const [emailError, setEmailError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const pwOk = pwValid(pw);
   const allAgree = consents.every((c) => agree[c.key]);
   const requiredAgree = consents.every((c) => !c.required || agree[c.key]);
   const valid = name.trim() && EMAIL_RE.test(email.trim()) && pwOk && requiredAgree;
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (email === "juhye@gachon.ac.kr") return setEmailError("이미 가입된 이메일이에요.");
-    // 동의는 계정 단위로 저장하고, 입장할 때 다시 묻지 않는다. 가입 후 자동 로그인 없이 인증 코드부터 입력한다
-    setDemo({ consent: { keep: true, learn: !!agree.learn }, signup: { name: name.trim(), email: email.trim(), pw, verified: false } });
+    if (!valid || loading) return;
+    setLoading(true);
+    const res = await signup({ name, email, pw, learn: !!agree.learn });
+    setLoading(false);
+    if (!res.ok) {
+      if (res.field === "email") setEmailError(res.message);
+      else setFormError(res.message);
+      return;
+    }
+    setFormError("");
+    // 동의는 계정 단위로 저장하고, 입장할 때 다시 묻지 않는다. 가입 후 자동 로그인 없이 인증 코드부터 입력한다.
+    // 데모는 목업 로그인에 쓰도록 가입 정보를 메모리에 남긴다(실제 API에서는 비밀번호를 들고 있지 않는다)
+    setDemo({ consent: { keep: true, learn: !!agree.learn }, ...(DEMO && { signup: { name: name.trim(), email: email.trim(), pw, verified: false } }) });
     router.push(`/verify?email=${encodeURIComponent(email.trim())}`);
   }
 
@@ -103,8 +117,13 @@ export default function Signup() {
           </p>
         </div>
 
-        <Button size="lg" className="mt-8 w-full" disabled={!valid} type="submit">
-          가입하기
+        {formError && (
+          <p role="alert" className="mt-6 rounded-2xl bg-coral/15 p-3.5 text-sm text-coral-ink">
+            {formError}
+          </p>
+        )}
+        <Button size="lg" className="mt-8 w-full" disabled={!valid || loading} type="submit">
+          {loading ? "가입 중…" : "가입하기"}
         </Button>
       </form>
     </Screen>
