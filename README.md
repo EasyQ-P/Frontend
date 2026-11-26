@@ -19,6 +19,15 @@ npm run dev                  # http://localhost:3000
 | `npm run start` | 빌드 결과 실행 |
 | `npm run lint` | ESLint 검사 |
 
+### 백엔드와 함께 실행
+
+백엔드 레포([EasyQ-P/Backend](https://github.com/EasyQ-P/Backend))의 `docker compose up`으로 auth · backend · DB · Caddy를 띄운 뒤, 이 레포에서 `npm run dev`를 실행하고 **브라우저는 http://localhost:8080 으로 접속**합니다. Caddy가 `/api/v1`은 백엔드로, 나머지는 Next.js 개발 서버(:3000)로 보내 주므로 `API_PROXY_TARGET`은 필요 없습니다. 자세한 내용은 백엔드 레포의 `docs/service/frontend-dev.md`를 보세요.
+
+| 계정 (로컬 개발 DB 전용) | 이메일 | 비밀번호 |
+|---|---|---|
+| 회원 | `member@easyq.local` | `easyq2026` |
+| 관리자 | `admin@easyq.local` | `admin2026` |
+
 ## 환경변수
 
 `.env.example`을 `.env.local`로 복사해서 씁니다. `.env.local`은 git에 올리지 않습니다.

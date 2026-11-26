@@ -6,11 +6,13 @@ import { Logo, Sticker } from "@/components/Brand";
 import { Button, Field, Screen, inputCls } from "@/components/ui";
 import { adminAccount } from "@/lib/admin";
 import { login, type LoginField } from "@/lib/auth";
+import { DEMO } from "@/lib/demo";
 import { setAdmin } from "@/lib/store";
 
 export default function AdminLogin() {
   const router = useRouter();
-  const [email, setEmail] = useState(adminAccount.email);
+  // 데모 모드에서는 시연용 관리자 계정을 미리 채운다
+  const [email, setEmail] = useState(DEMO ? adminAccount.email : "");
   const [pw, setPw] = useState("");
   const [error, setError] = useState<{ field: LoginField; message: string } | null>(null);
   const [loading, setLoading] = useState(false);

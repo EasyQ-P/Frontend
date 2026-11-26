@@ -1,6 +1,6 @@
-// 인증 API (설계서 API-04 · 05 · 09). 처리 서버는 auth.
+// 인증 API (설계서 API-04 · 05 · 06 · 09). 처리 서버는 auth.
 // 다른 API 모듈도 이 파일처럼 기능별로 lib/api/<이름>.ts에 만든다
-import { api, refreshCsrfToken, setCsrfToken } from "./client";
+import { ApiError, api, refreshCsrfToken, setCsrfToken } from "./client";
 import type { Auth, User } from "./types";
 
 /** API-04 로그인. 관리자도 같은 API를 쓴다 */
@@ -25,11 +25,16 @@ export function getMe(): Promise<User> {
 }
 
 /**
- * 새로고침 후 로그인 상태 복구 (API-09 + API-06).
- * 로그인 상태가 아니면 null
+ * 새로고침 후 회원 로그인 상태 복구 (API-06 → API-09).
+ * 로그인하지 않았거나 게스트 세션이면 null
  */
 export async function restoreSession(): Promise<User | null> {
   const token = await refreshCsrfToken();
   if (!token) return null;
-  return getMe();
+  try {
+    return await getMe();
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
+    throw e;
+  }
 }

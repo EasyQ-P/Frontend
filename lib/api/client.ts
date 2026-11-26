@@ -6,7 +6,7 @@ import type { ApiErrorBody, ApiSuccess } from "./types";
 
 export const API_BASE = "/api/v1";
 
-// TODO(backend 확인): API-06이 요구하는 X-EasyQ-Client 헤더 값이 설계서에 정해져 있지 않음
+// API-06 CSRF 재발급에 필요한 헤더 (백엔드 docs/service/frontend-dev.md)
 const CLIENT_HEADER = { "X-EasyQ-Client": "web" };
 
 export class ApiError extends Error {
@@ -71,8 +71,10 @@ export type RequestOptions = {
   signal?: AbortSignal;
 };
 
-async function request<T>(method: Method, path: string, opts: RequestOptions = {}): Promise<T> {
-  const { body, query, ifMatch, idempotencyKey, signal } = opts;
+async function request<T>(method: Method, path: string, opts: RequestOptions = {}, retried = false): Promise<T> {
+  const { body, query, ifMatch, signal } = opts;
+  // 재시도해도 같은 키를 보내도록 여기서 한 번만 만든다
+  const idempotencyKey = opts.idempotencyKey === true ? crypto.randomUUID() : opts.idempotencyKey;
   const needsCsrf = opts.csrf ?? method !== "GET";
 
   let url = API_BASE + path;
@@ -87,7 +89,7 @@ async function request<T>(method: Method, path: string, opts: RequestOptions = {
   const headers: Record<string, string> = { Accept: "application/json", ...CLIENT_HEADER };
   if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   if (ifMatch !== undefined) headers["If-Match"] = `"${ifMatch}"`;
-  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey === true ? crypto.randomUUID() : idempotencyKey;
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   if (needsCsrf) {
     const token = csrfToken ?? (await refreshCsrfToken());
     if (token) headers["X-CSRF-Token"] = token;
@@ -108,6 +110,12 @@ async function request<T>(method: Method, path: string, opts: RequestOptions = {
 
   if (!res.ok) {
     const err = json && "error" in json ? json.error : null;
+    // CSRF 실패(403 + details.reason = "CSRF")만 토큰을 다시 받아 한 번 재시도한다
+    const reason = (err?.details as { reason?: string } | undefined)?.reason;
+    if (res.status === 403 && reason === "CSRF" && needsCsrf && !retried) {
+      csrfToken = null;
+      if (await refreshCsrfToken()) return request<T>(method, path, { ...opts, idempotencyKey }, true);
+    }
     const retryAfter = Number(res.headers.get("Retry-After")) || undefined;
     throw new ApiError(
       res.status,

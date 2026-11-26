@@ -91,13 +91,29 @@ function saveMember() {
   } catch {}
 }
 
-export function restoreMember() {
+function savedMember(): { name: string; loginAt: number } | null {
   try {
     const saved = sessionStorage.getItem(MEMBER_KEY);
-    if (!saved || state.authed) return;
-    const { name, loginAt } = JSON.parse(saved) as { name: string; loginAt: number };
-    setDemo({ authed: true, name, loginAt });
-  } catch {}
+    return saved ? (JSON.parse(saved) as { name: string; loginAt: number }) : null;
+  } catch {
+    return null;
+  }
+}
+
+// 데모 모드: 탭에 남긴 값으로 복구
+export function restoreMember() {
+  const saved = savedMember();
+  if (!saved || state.authed) return;
+  setDemo({ authed: true, name: saved.name, loginAt: saved.loginAt });
+}
+
+// 실제 API: 서버 세션 확인 결과(API-06 → API-09)를 반영한다. 서버가 기준이고 탭에 남긴 값은 로그인 시각에만 쓴다
+export function applyServerSession(user: { display_name: string } | null) {
+  if (!user) {
+    if (state.authed) setDemo({ authed: false, loginAt: 0 });
+    return;
+  }
+  setDemo({ authed: true, name: user.display_name, loginAt: state.loginAt || savedMember()?.loginAt || 0 });
 }
 
 // 관리자 로그인은 새로고침해도 풀리지 않도록 sessionStorage에 남긴다

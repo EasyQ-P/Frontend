@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { Logo } from "./Brand";
 import { Icon, type IconName } from "./Icon";
 import { LLM_ONLY } from "@/lib/admin";
+import { logout } from "@/lib/auth";
 import { restoreAdmin, setAdmin, useDemo } from "@/lib/store";
 
 // ── 관리자 화면 틀 ────────────────────────────────
@@ -28,6 +29,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!admin && !restoreAdmin()) router.replace("/admin/login");
   }, [admin, router]);
+
+  async function signOut() {
+    await logout();
+    setAdmin(null);
+    router.push("/admin/login");
+  }
 
   if (!admin) return null;
 
@@ -60,10 +67,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <p className="mt-0.5 text-[15px] font-bold">{servingVersion === LLM_ONLY ? "LLM_ONLY" : servingVersion}</p>
           </div>
           <button
-            onClick={() => {
-              setAdmin(null);
-              router.push("/admin/login");
-            }}
+            onClick={signOut}
             className="flex w-full items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-ink/55 hover:bg-white hover:text-ink"
           >
             <Icon name="logout" size={17} />
@@ -79,7 +83,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Logo className="text-[20px]" />
               <span className="rounded-full bg-ink px-2 py-0.5 text-[11px] font-bold text-white">ADMIN</span>
             </span>
-            <button onClick={() => setAdmin(null)} className="text-sm font-semibold text-ink/55" aria-label="로그아웃">
+            <button onClick={signOut} className="text-sm font-semibold text-ink/55" aria-label="로그아웃">
               <Icon name="logout" size={19} />
             </button>
           </div>
