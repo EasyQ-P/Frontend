@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { Bubble, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
+import { QrScanner, type ScanError } from "@/components/QrScanner";
 import { Button, PageTitle, Screen, StatusPill, TopBar, inputCls } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { getJoinPreview, participate, type JoinPreview } from "@/lib/api/join";
@@ -150,16 +151,29 @@ function Join() {
     setStep("who");
   }
 
+  // 카메라로 QR 읽기. 읽혀야만 입장 코드를 확인한다 (데모 · 실제 같음)
   function scan() {
-    // 실제 서비스: 휴대폰 기본 카메라로 QR을 찍으면 /join?code=… 로 바로 들어온다
-    if (!DEMO) return setError("휴대폰 기본 카메라로 강연장 QR을 찍으면 이 화면이 바로 열려요. 아래에 입장 코드를 입력해도 돼요.");
+    setError("");
     setScanning(true);
-    setTimeout(() => {
-      setScanning(false);
-      const live = codes.l1 ?? "QX7K2";
-      setCode(live);
-      check(live);
-    }, 1400);
+  }
+
+  function scanned(c: string) {
+    setScanning(false);
+    setCode(c);
+    check(c);
+  }
+
+  function scanFailed(e: ScanError) {
+    setScanning(false);
+    setError(
+      e === "denied"
+        ? "카메라 권한이 없어요. 주소창의 사이트 설정에서 카메라를 허용하거나, 아래에 입장 코드를 입력해 주세요."
+        : e === "insecure"
+          ? "카메라는 https 주소에서만 쓸 수 있어요. 아래에 입장 코드를 입력해 주세요."
+          : e === "missing"
+            ? "카메라를 찾을 수 없어요. 아래에 입장 코드를 입력해 주세요."
+            : "카메라를 켜지 못했어요. 아래에 입장 코드를 입력해 주세요.",
+    );
   }
 
   // 회원은 로그인한 상태면 로그인 화면 없이 강연 상태별 화면으로 바로 간다
@@ -186,24 +200,27 @@ function Join() {
 
       {step === "code" && (
         <div className="flex flex-1 flex-col px-5 pt-6">
-          <button onClick={scan} className="relative flex aspect-[1/0.9] w-full md:aspect-[16/8] items-center justify-center overflow-hidden rounded-[30px] bg-ink">
-            {["left-6 top-6 border-l-[3px] border-t-[3px] rounded-tl-2xl", "right-6 top-6 border-r-[3px] border-t-[3px] rounded-tr-2xl", "bottom-6 left-6 border-b-[3px] border-l-[3px] rounded-bl-2xl", "bottom-6 right-6 border-b-[3px] border-r-[3px] rounded-br-2xl"].map((c) => (
-              <span key={c} className={`absolute h-10 w-10 border-white/80 ${c}`} />
-            ))}
-            {scanning ? (
-              <>
-                <span className="absolute inset-x-10 top-1/2 h-0.5 animate-pulse rounded-full bg-coral shadow-[0_0_24px_#f4625a]" />
-                <p className="font-semibold text-white">QR 읽는 중…</p>
-              </>
-            ) : (
+          {scanning ? (
+            <div className="relative aspect-[1/0.9] w-full overflow-hidden rounded-[30px] bg-ink md:aspect-[16/8]">
+              <QrScanner onResult={scanned} onError={scanFailed} />
+              <button onClick={() => setScanning(false)} className="absolute right-4 top-4 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold">
+                닫기
+              </button>
+            </div>
+          ) : (
+            <button onClick={scan} disabled={busy} className="relative flex aspect-[1/0.9] w-full md:aspect-[16/8] items-center justify-center overflow-hidden rounded-[30px] bg-ink">
+              {["left-6 top-6 border-l-[3px] border-t-[3px] rounded-tl-2xl", "right-6 top-6 border-r-[3px] border-t-[3px] rounded-tr-2xl", "bottom-6 left-6 border-b-[3px] border-l-[3px] rounded-bl-2xl", "bottom-6 right-6 border-b-[3px] border-r-[3px] rounded-br-2xl"].map((c) => (
+                <span key={c} className={`absolute h-10 w-10 border-white/80 ${c}`} />
+              ))}
               <div className="flex flex-col items-center text-white">
                 <Sticker size={56} rotate={-8} float>
                   📷
                 </Sticker>
-                <p className="mt-4 text-lg font-bold">눌러서 QR 스캔하기</p>
+                <p className="mt-4 text-lg font-bold">{busy ? "입장 코드 확인 중…" : "눌러서 QR 스캔하기"}</p>
+                <p className="mt-1 text-sm text-white/55">카메라로 강연장 화면의 QR을 찍어요</p>
               </div>
-            )}
-          </button>
+            </button>
+          )}
 
           <form
             className="mt-6"
