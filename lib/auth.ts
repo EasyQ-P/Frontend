@@ -13,6 +13,14 @@ const unverifiedMessage = "이메일 인증을 마치지 않은 계정이에요.
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// 메일을 받을 수 없는 특수 용도 도메인. 백엔드 가입 검사(email-validator)와 같은 목록이라 가입 전에 미리 안내한다
+const SPECIAL_USE_DOMAINS = ["arpa", "invalid", "local", "localhost", "onion", "test"];
+
+export function undeliverableEmail(email: string) {
+  const domain = email.trim().toLowerCase().split("@")[1] ?? "";
+  return SPECIAL_USE_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
 export type LoginField = "email" | "pw" | "form";
 export type LoginResult =
   | { ok: true; name: string; email: string }
