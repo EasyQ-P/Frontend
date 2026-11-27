@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Avatar, Sticker } from "@/components/Brand";
 import { Icon, type IconName } from "@/components/Icon";
 import { Button, Field, Modal, Screen, inputCls, useToast } from "@/components/ui";
-import { MOCK_PASSWORD, pwValid } from "@/lib/auth";
+import { MOCK_PASSWORD, logout, pwValid } from "@/lib/auth";
 import { LEARN_CONSENT_TEXT, archive, inquiries, lectures, me, notices, statusOf } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
@@ -75,7 +75,8 @@ export default function Me() {
             </button>
           ))}
           <button
-            onClick={() => {
+            onClick={async () => {
+              await logout();
               setDemo({ authed: false, loginAt: 0 });
               router.push("/");
             }}

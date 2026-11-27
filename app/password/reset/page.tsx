@@ -1,10 +1,11 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
 import { Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { Button, Empty, Field, Screen, TopBar, inputCls } from "@/components/ui";
+import { resetPassword } from "@/lib/account";
 import { pwRules, pwValid } from "@/lib/auth";
 import { setDemo, useDemo } from "@/lib/store";
 
@@ -17,26 +18,53 @@ export default function ResetPasswordPage() {
   );
 }
 
-// 새 비밀번호 설정. 메일 링크(token)로만 들어온다. 바꾼 뒤에는 로그인 화면으로 보낸다
+// 주소의 #뒷부분. 서버 렌더링에서는 알 수 없으므로 null
+function useHash() {
+  return useSyncExternalStore(
+    (l) => {
+      window.addEventListener("hashchange", l);
+      return () => window.removeEventListener("hashchange", l);
+    },
+    () => window.location.hash,
+    () => null,
+  );
+}
+
+// 새 비밀번호 설정. 메일 링크로만 들어온다. 바꾼 뒤에는 로그인 화면으로 보낸다.
+// 실제 메일 링크는 서버 로그 · Referer에 토큰이 남지 않도록 #token=… 으로 오고, 데모는 ?token=… 을 쓴다
 function ResetPassword() {
   const params = useSearchParams();
-  const token = params.get("token");
+  const hash = useHash();
+  const token = hash === null ? undefined : new URLSearchParams(hash.slice(1)).get("token") || params.get("token");
   const email = params.get("email") ?? "";
   const { signup } = useDemo();
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const mismatch = confirm.length > 0 && pw !== confirm;
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!pwValid(pw) || pw !== confirm) return;
+    if (!token || !pwValid(pw) || pw !== confirm || loading) return;
+    setLoading(true);
+    const res = await resetPassword(token, pw);
+    setLoading(false);
+    if (!res.ok) {
+      if ("expired" in res && res.expired) return setExpired(true);
+      return setError(res.message);
+    }
     // 이번 데모에서 가입한 계정이면 바뀐 비밀번호로 로그인할 수 있게 한다
     if (signup && signup.email === email) setDemo({ signup: { ...signup, pw } });
     setDone(true);
   }
 
-  if (!token)
+  // 주소를 읽기 전(서버 렌더링 · 첫 화면)에는 아무것도 그리지 않는다
+  if (token === undefined) return null;
+
+  if (!token || expired)
     return (
       <Screen width="narrow">
         <TopBar back="/login" />
@@ -93,9 +121,14 @@ function ResetPassword() {
             <input className={inputCls} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="한 번 더 입력" />
           </Field>
         </div>
+        {error && (
+          <p role="alert" className="mt-4 rounded-2xl bg-coral/15 p-3.5 text-sm text-coral-ink">
+            {error}
+          </p>
+        )}
         <div className="mt-auto pb-10 pt-8">
-          <Button size="lg" className="w-full" type="submit" disabled={!pwValid(pw) || pw !== confirm}>
-            비밀번호 바꾸기
+          <Button size="lg" className="w-full" type="submit" disabled={!pwValid(pw) || pw !== confirm || loading}>
+            {loading ? "바꾸는 중…" : "비밀번호 바꾸기"}
           </Button>
         </div>
       </form>

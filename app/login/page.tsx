@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import { Sticker } from "@/components/Brand";
 import { Button, Field, Screen, TopBar, inputCls } from "@/components/ui";
 import { login, type LoginField } from "@/lib/auth";
+import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo } from "@/lib/store";
 
 // useSearchParams는 Suspense 안에서만 쓸 수 있다
@@ -23,7 +24,8 @@ function Login() {
   // QR 입장 중 회원을 고르면 로그인 뒤 그 강연으로 돌아간다. 내부 경로만 받는다
   const nextParam = useSearchParams().get("next");
   const next = nextParam?.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/home";
-  const [email, setEmail] = useState(signup?.email ?? "juhye@gachon.ac.kr");
+  // 데모 모드에서는 시연용 계정을 미리 채운다
+  const [email, setEmail] = useState(signup?.email ?? (DEMO ? "juhye@gachon.ac.kr" : ""));
   const [pw, setPw] = useState("");
   const [error, setError] = useState<{ field: LoginField; message: string } | null>(null);
   const [loading, setLoading] = useState(false);

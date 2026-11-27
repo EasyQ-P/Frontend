@@ -4,17 +4,29 @@ import Link from "next/link";
 import { Avatar, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { RoundButton, Screen } from "@/components/ui";
+import { buildToday, dateKey, type Today } from "@/lib/homeToday";
 import { archive, lectures, statusOf, tones } from "@/lib/mock";
 import { useDemo } from "@/lib/store";
+import { useToday } from "@/lib/useToday";
+
+const linkCls = "text-white underline decoration-white/25 underline-offset-[6px] hover:decoration-white";
 
 export default function Home() {
-  const { name, deletedArchives, endedLectures, startedLectures } = useDemo();
-  const live = lectures.find((l) => l.status === "live")!;
-  const ready = lectures.find((l) => l.status === "ready")!;
+  const { name, deletedArchives, deletedLectures, endedLectures, startedLectures } = useDemo();
+  // 내가 연 강연 (다른 사람이 연 강연은 host가 있다)
+  const myLectures = lectures.filter((l) => !l.host && !deletedLectures.includes(l.id)).map((l) => ({ ...l, status: statusOf(l, endedLectures, startedLectures) }));
+  const openLectures = myLectures.filter((l) => l.status !== "ended");
   // 보관함 화면과 같은 목록에서 센다. 홈에는 최근 3개만 보여준다
   const myArchive = archive.filter((a) => !deletedArchives.includes(a.id));
   const recent = myArchive.slice(0, 3);
   const notes = myArchive.filter((a) => a.summary === "ready").length;
+  const today = useToday();
+  const plan = buildToday({
+    lectures: myLectures,
+    readyNotes: notes,
+    archiveCount: myArchive.length,
+    today: today && dateKey(new Date(today.year, today.month - 1, today.day)),
+  });
 
   return (
     <Screen nav dark width="wide">
@@ -25,45 +37,27 @@ export default function Home() {
             <h1 className="text-[44px] font-extrabold leading-none tracking-[-0.05em] md:text-[56px]">오늘</h1>
             <p className="pt-1 text-right text-[15px] leading-tight">
               <span className="mr-1.5 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-coral" />
-              10월 22일
+              {/* 날짜를 읽기 전에는 자리만 잡아 둔다 */}
+              {today ? `${today.month}월 ${today.day}일` : "\u00a0"}
               <br />
-              <span className="text-white/45">목요일</span>
+              <span className="text-white/45">{today?.weekday ?? "\u00a0"}</span>
             </p>
           </div>
 
           <p className="mt-12 text-[25px] font-semibold leading-[1.45] md:text-[30px] tracking-[-0.035em] text-white/40">
-            {name}님, 오늘은{" "}
-            <Link href={`/lectures/${live.id}/live`} className="text-white underline decoration-white/25 underline-offset-[6px] hover:decoration-white">
-              트랜스포머 강연
-            </Link>{" "}
-            <Sticker size={28} rotate={-8}>
-              🤖
-            </Sticker>{" "}
-            를 진행하고,{" "}
-            <Sticker size={28} rotate={8}>
-              📄
-            </Sticker>{" "}
-            <Link href={`/lectures/${ready.id}`} className="text-white underline decoration-white/25 underline-offset-[6px] hover:decoration-white">
-              DB 특강 교안
-            </Link>
-            을 다시 올리고,{" "}
-            <Link href="/archive" className="text-white underline decoration-white/25 underline-offset-[6px] hover:decoration-white">
-              요약 노트 {notes}개
-            </Link>{" "}
-            <Sticker size={28} rotate={-6}>
-              📝
-            </Sticker>{" "}
-            를 확인할 차례예요.
+            <TodaySentence name={name} plan={plan} />
           </p>
 
-          <div className="mt-6 flex items-center gap-2 text-xs text-white/45">
-            내 강연 · 보관함 기준
-            <span className="flex -space-x-2">
-              {["김", "박", "이"].map((n) => (
-                <Avatar key={n} name={n} size={22} className="!ring-ink" />
-              ))}
-            </span>
-          </div>
+          {plan.kind !== "welcome" && (
+            <div className="mt-6 flex items-center gap-2 text-xs text-white/45">
+              내 강연 · 보관함 기준
+              <span className="flex -space-x-2">
+                {["김", "박", "이"].map((n) => (
+                  <Avatar key={n} name={n} size={22} className="!ring-ink" />
+                ))}
+              </span>
+            </div>
+          )}
         </section>
 
         {/* 아래 흰 시트 */}
@@ -84,6 +78,11 @@ export default function Home() {
               전체 {myArchive.length}개 강연 <Icon name="right" size={15} />
             </Link>
           </div>
+          {recent.length === 0 && (
+            <p className="rounded-[22px] bg-white p-4 text-sm leading-relaxed text-muted">
+              아직 참여한 강연이 없어요. QR로 강연에 들어가면 질문과 요약 노트가 여기 모여요.
+            </p>
+          )}
           <ul className="divide-y divide-line">
             {recent.map((a) => {
               const q = a.myQuestions[0];
@@ -117,10 +116,13 @@ export default function Home() {
             <RoundButton href="/lectures/new" icon="plus" label="새 강연" />
           </div>
           <div className="space-y-2">
-            {lectures
-              .map((l) => ({ ...l, status: statusOf(l, endedLectures, startedLectures) }))
-              .filter((l) => l.status !== "ended")
-              .map((l) => (
+            {openLectures.length === 0 && (
+              <Link href="/lectures/new" className="block rounded-[22px] bg-white p-4 text-sm leading-relaxed text-muted">
+                {myLectures.length === 0 ? "아직 만든 강연이 없어요." : "진행 중이거나 예정된 강연이 없어요."}{" "}
+                <span className="font-semibold text-ink underline underline-offset-4">새 강연 만들기</span>
+              </Link>
+            )}
+            {openLectures.map((l) => (
                 <Link
                   key={l.id}
                   href={l.status === "live" ? `/lectures/${l.id}/live` : `/lectures/${l.id}`}
@@ -140,5 +142,78 @@ export default function Home() {
         </section>
       </div>
     </Screen>
+  );
+}
+
+// "오늘" 문장. 할 일 조각을 쉼표로 잇고, 마지막 조각만 "~할 차례예요"로 끝낸다
+const rotations = [-8, 8, -6];
+
+function TodaySentence({ name, plan }: { name: string; plan: Today }) {
+  if (plan.kind === "welcome")
+    return (
+      <>
+        {name}님, 반가워요!{" "}
+        <Sticker size={28} rotate={-8}>
+          👋
+        </Sticker>{" "}
+        강연을 듣고 있다면{" "}
+        <Link href="/join" className={linkCls}>
+          QR을 찍어 질문
+        </Link>
+        하고, 강연을 한다면{" "}
+        <Link href="/lectures/new" className={linkCls}>
+          첫 강연을 만들어
+        </Link>{" "}
+        보세요.
+      </>
+    );
+
+  if (plan.kind === "clear")
+    return (
+      <>
+        {name}님, 오늘은 확인할 일이 없어요.{" "}
+        <Sticker size={28} rotate={8}>
+          ☕
+        </Sticker>{" "}
+        새 질문이 생기면{" "}
+        <Link href="/join" className={linkCls}>
+          QR로 들어가
+        </Link>{" "}
+        보세요.
+      </>
+    );
+
+  const last = plan.clauses.length - 1;
+  return (
+    <>
+      {name}님, 오늘은{" "}
+      {plan.clauses.map((c, i) => {
+        const sticker = (
+          <Sticker size={28} rotate={rotations[i % rotations.length]}>
+            {c.emoji}
+          </Sticker>
+        );
+        const link = (
+          <Link href={c.href} className={linkCls}>
+            {c.label}
+          </Link>
+        );
+        const verb = i === last ? `${c.lastVerb} 차례예요.` : `${c.verb}, `;
+        return (
+          <span key={c.key}>
+            {c.stickerFirst ? (
+              <>
+                {sticker} {link}
+                {c.josa} {verb}
+              </>
+            ) : (
+              <>
+                {link} {sticker} {c.josa} {verb}
+              </>
+            )}
+          </span>
+        );
+      })}
+    </>
   );
 }
