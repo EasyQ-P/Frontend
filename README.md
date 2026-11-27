@@ -28,6 +28,20 @@ npm run dev                  # http://localhost:3000
 | 회원 | `member@easyq.local` | `easyq2026` |
 | 관리자 | `admin@easyq.local` | `admin2026` |
 
+## 배포 (Docker)
+
+운영에서는 EC2의 Caddy 뒤에서 `frontend:3000` 컨테이너로 실행합니다(설계서 7.1). `next.config.ts`의 `output: "standalone"` 결과물만 담아 이미지를 만듭니다.
+
+```bash
+docker build -t easyq-frontend .                                   # 운영 (실제 API)
+docker build -t easyq-frontend:demo --build-arg NEXT_PUBLIC_DEMO=true .   # 시연용 (목업)
+docker run -p 3000:3000 easyq-frontend
+```
+
+- `NEXT_PUBLIC_*` 값은 **빌드할 때** 코드에 들어갑니다. 실행할 때 `-e`로 바꿀 수 없으니 용도별로 따로 빌드합니다.
+- 컨테이너는 root가 아닌 `nextjs` 계정으로, `0.0.0.0:3000`에서 실행됩니다.
+- API 주소 환경변수는 필요 없습니다. 브라우저는 같은 도메인의 `/api/v1`을 부르고 Caddy가 auth · backend로 나눠 보냅니다.
+
 ## 환경변수
 
 `.env.example`을 `.env.local`로 복사해서 씁니다. `.env.local`은 git에 올리지 않습니다.
