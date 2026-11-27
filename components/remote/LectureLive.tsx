@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Bubble, Sticker } from "@/components/Brand";
-import { FakeQR } from "@/components/FakeQR";
+import { JoinQr } from "@/components/JoinQr";
 import { Icon } from "@/components/Icon";
 import { QrModal } from "@/components/QrModal";
 import { Button, Empty, Modal, Screen, StatusPill, TopBar, useToast } from "@/components/ui";
@@ -104,7 +104,7 @@ export function RemoteLectureLive({ id }: { id: string }) {
         </Bubble>
 
         <section className="mt-6 flex items-center gap-4 rounded-[24px] bg-white p-4">
-          <FakeQR code={s.join_code ?? ""} size={96} />
+          <JoinQr code={s.join_code ?? ""} url={s.join_url} size={96} />
           <div className="flex-1">
             <p className="text-xs text-muted">입장 코드</p>
             <p className="text-3xl font-extrabold tracking-[0.2em]">{s.join_code}</p>
@@ -127,7 +127,7 @@ export function RemoteLectureLive({ id }: { id: string }) {
         </Button>
       </div>
 
-      <QrModal open={qrOpen} onClose={() => setQrOpen(false)} code={s.join_code ?? ""} title={s.title} />
+      <QrModal open={qrOpen} onClose={() => setQrOpen(false)} code={s.join_code ?? ""} title={s.title} url={s.join_url} />
 
       <Modal open={endOpen} onClose={() => setEndOpen(false)} title="강연을 끝낼까요?">
         <p className="flex items-start gap-1.5 text-sm leading-relaxed text-muted">
