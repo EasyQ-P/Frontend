@@ -43,12 +43,6 @@ export function localDateTime(date: string, time: string) {
   return new Date(y, m - 1, d, hh, mm);
 }
 
-// 오늘 날짜 (yyyy-mm-dd, 기기 시간대)
-export function todayInput() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 // ── 교안 ──
 export const isBudgetHeld = (d: SessionDocument) => d.status === "PENDING" && d.error_code === "BUDGET_EXCEEDED";
 // 아직 처리 중이라 상태를 다시 물어봐야 하는 교안 (예산 보류는 기다려도 바로 바뀌지 않으니 뺀다)
