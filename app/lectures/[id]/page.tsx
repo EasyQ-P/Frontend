@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { FakeQR } from "@/components/FakeQR";
+import { JoinQr } from "@/components/JoinQr";
 import { Bubble, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { QrModal, QrReissue } from "@/components/QrModal";
@@ -273,7 +273,7 @@ function LectureDetail() {
         {/* 3. QR */}
         <Step n={3} title="청중 입장 QR" done desc="강연을 시작하면 청중이 이 QR로 들어와요.">
           <div className="flex items-center gap-4 rounded-[24px] bg-white p-4">
-            <FakeQR code={code} size={112} />
+            <JoinQr code={code} size={112} />
             <div className="flex-1">
               <p className="text-xs text-muted">입장 코드</p>
               <p className="text-3xl font-extrabold tracking-[0.2em]">{code}</p>

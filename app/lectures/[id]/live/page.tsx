@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { FakeQR } from "@/components/FakeQR";
+import { JoinQr } from "@/components/JoinQr";
 import { Bubble, Logo, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { QrModal, QrReissue } from "@/components/QrModal";
@@ -388,7 +388,7 @@ function LiveDashboard() {
 
               {/* QR */}
               <div className="mt-4 flex items-center gap-4 rounded-[28px] bg-white p-4">
-                <FakeQR code={code} size={96} />
+                <JoinQr code={code} size={96} />
                 <div className="flex-1">
                   <p className="text-xs text-muted">입장 코드</p>
                   <p className="text-3xl font-extrabold tracking-[0.2em]">{code}</p>

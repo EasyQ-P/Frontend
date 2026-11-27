@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bubble, Sticker } from "@/components/Brand";
-import { FakeQR } from "@/components/FakeQR";
+import { JoinQr } from "@/components/JoinQr";
 import { Icon } from "@/components/Icon";
 import { MAX_MB, SttConsentModal, validateDeck } from "@/components/lecture";
 import { QrModal } from "@/components/QrModal";
@@ -332,7 +332,7 @@ export function RemoteLecturePrep({ id }: { id: string }) {
         {/* 3. QR */}
         <Step n={3} title="청중 입장 QR" done desc="강연을 시작하면 청중이 이 QR로 들어와요.">
           <div className="flex items-center gap-4 rounded-[24px] bg-white p-4">
-            <FakeQR code={s.join_code ?? ""} size={112} />
+            <JoinQr code={s.join_code ?? ""} url={s.join_url} size={112} />
             <div className="flex-1">
               <p className="text-xs text-muted">입장 코드</p>
               <p className="text-3xl font-extrabold tracking-[0.2em]">{s.join_code}</p>
@@ -360,7 +360,7 @@ export function RemoteLecturePrep({ id }: { id: string }) {
         </div>
       </div>
 
-      <QrModal open={qrOpen} onClose={() => setQrOpen(false)} code={s.join_code ?? ""} title={s.title} />
+      <QrModal open={qrOpen} onClose={() => setQrOpen(false)} code={s.join_code ?? ""} title={s.title} url={s.join_url} />
 
       <Modal open={reissueOpen} onClose={() => setReissueOpen(false)} title="입장 QR을 재발급할까요?">
         <p className="text-sm leading-relaxed text-muted">새 QR과 입장 코드가 만들어지고, 이전 QR · 코드 · 링크로는 더 이상 들어올 수 없어요. 이미 입장한 청중은 그대로 참여해요.</p>
