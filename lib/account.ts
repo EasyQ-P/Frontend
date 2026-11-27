@@ -2,7 +2,7 @@
 // 그 밖에는 auth 서버(API-01 · 02 · 03 · 07 · 08)로 처리한다. 화면은 결과의 field · message만 보여 주면 된다
 import * as accountsApi from "./api/accounts";
 import { ApiError } from "./api/client";
-import { MOCK_VERIFY_CODE } from "./auth";
+import { MOCK_VERIFY_CODE, undeliverableEmail } from "./auth";
 import { DEMO } from "./demo";
 
 export type Fail<F extends string = "form"> = { ok: false; field: F | "form"; message: string };
@@ -24,6 +24,7 @@ function common(e: unknown, action: string): Fail {
 // ── API-01 회원가입 ──
 export async function signup(input: { name: string; email: string; pw: string; learn: boolean }): Promise<Result<"email">> {
   const email = input.email.trim();
+  if (undeliverableEmail(email)) return { ok: false, field: "email", message: "메일을 받을 수 없는 주소예요. 인증 메일을 받을 이메일을 입력해 주세요." };
   if (DEMO) {
     await mockDelay();
     if (email === "juhye@gachon.ac.kr") return { ok: false, field: "email", message: "이미 가입된 이메일이에요." };
