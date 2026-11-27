@@ -1,32 +1,151 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Avatar, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { RoundButton, Screen } from "@/components/ui";
-import { buildToday, dateKey, type Today } from "@/lib/homeToday";
-import { archive, lectures, statusOf, tones } from "@/lib/mock";
+import { ApiError } from "@/lib/api/client";
+import { listDocuments, listHostedLectures, listJoinedLectures, type Session, type SessionDocument } from "@/lib/api/lectures";
+import { DEMO } from "@/lib/demo";
+import { buildToday, dateKey, type Today, type TodayLecture } from "@/lib/homeToday";
+import { isBudgetHeld, sessionToLecture } from "@/lib/lectures";
+import { archive, lectures, statusOf, tones, type Tone } from "@/lib/mock";
 import { useDemo } from "@/lib/store";
 import { useToday } from "@/lib/useToday";
 
 const linkCls = "text-white underline decoration-white/25 underline-offset-[6px] hover:decoration-white";
 
-export default function Home() {
+// 화면에 필요한 값만 모은 모양. 데모(목업)와 실제 API가 같은 화면을 쓴다
+type RecentItem = { id: string; href: string | null; speaker: string; title: string; detail: React.ReactNode; emoji: string };
+type OpenLecture = { id: string; title: string; date: string; time: string; status: "ready" | "live"; tone: Tone };
+type HomeData = {
+  lectures: TodayLecture[];
+  readyNotes: number;
+  archiveCount: number;
+  recent: RecentItem[];
+  open: OpenLecture[];
+  myLectureCount: number;
+  avatars: string[];
+};
+
+export default function HomePage() {
+  return DEMO ? <DemoHome /> : <RemoteHome />;
+}
+
+// ── 데모: 목업 강연 · 보관함 ──
+function DemoHome() {
   const { name, deletedArchives, deletedLectures, endedLectures, startedLectures } = useDemo();
   // 내가 연 강연 (다른 사람이 연 강연은 host가 있다)
   const myLectures = lectures.filter((l) => !l.host && !deletedLectures.includes(l.id)).map((l) => ({ ...l, status: statusOf(l, endedLectures, startedLectures) }));
-  const openLectures = myLectures.filter((l) => l.status !== "ended");
   // 보관함 화면과 같은 목록에서 센다. 홈에는 최근 3개만 보여준다
   const myArchive = archive.filter((a) => !deletedArchives.includes(a.id));
-  const recent = myArchive.slice(0, 3);
-  const notes = myArchive.filter((a) => a.summary === "ready").length;
-  const today = useToday();
-  const plan = buildToday({
+  const data: HomeData = {
     lectures: myLectures,
-    readyNotes: notes,
+    readyNotes: myArchive.filter((a) => a.summary === "ready").length,
     archiveCount: myArchive.length,
-    today: today && dateKey(new Date(today.year, today.month - 1, today.day)),
-  });
+    recent: myArchive.slice(0, 3).map((a) => {
+      const q = a.myQuestions[0];
+      return {
+        id: a.id,
+        href: `/archive/${a.id}`,
+        speaker: a.speaker,
+        title: a.title.split("·")[1]?.trim() ?? a.title,
+        detail: q && (
+          <>
+            에서 <span className="text-ink">‘{q.text}’</span> 질문을 남겼어요
+          </>
+        ),
+        emoji: a.emoji,
+      };
+    }),
+    open: myLectures.filter((l): l is typeof l & { status: "ready" | "live" } => l.status !== "ended"),
+    myLectureCount: myLectures.length,
+    avatars: ["김", "박", "이"],
+  };
+  return <HomeView name={name} data={data} />;
+}
+
+// ── 실제 API: 내 강연(API-14 hosted) · 보관함(API-14 joined) · 교안 상태(API-22) ──
+function docsState(docs: SessionDocument[]): NonNullable<TodayLecture["file"]>["state"] | null {
+  if (docs.length === 0) return null;
+  if (docs.some((d) => d.status === "FAILED")) return "failed";
+  if (docs.every((d) => d.status === "READY")) return "done";
+  if (docs.some(isBudgetHeld)) return "pending";
+  return "processing";
+}
+
+function RemoteHome() {
+  const router = useRouter();
+  const { name } = useDemo();
+  const [data, setData] = useState<HomeData | null>(null);
+
+  useEffect(() => {
+    let stopped = false;
+    (async () => {
+      try {
+        const [hosted, joined] = await Promise.all([listHostedLectures(), listJoinedLectures()]);
+        const open = hosted.items.filter((s) => s.status === "DRAFT" || s.status === "LIVE");
+        // 아직 끝나지 않은 강연만 교안 상태를 본다 ("교안을 올리고" 문장용)
+        const docs = await Promise.all(open.map((s) => listDocuments(s.session_id).then((d) => d.items, () => [] as SessionDocument[])));
+        const fileOf = new Map(open.map((s, i) => [s.session_id, docsState(docs[i])]));
+        const toToday = (s: Session): TodayLecture => {
+          const l = sessionToLecture(s);
+          const state = fileOf.get(s.session_id);
+          return { ...l, file: state ? { state } : null };
+        };
+        if (stopped) return;
+        setData({
+          lectures: hosted.items.map(toToday),
+          // 요약 노트 API(API-37)가 아직 없어 0으로 둔다
+          readyNotes: 0,
+          archiveCount: joined.total_count,
+          recent: joined.items.slice(0, 3).map((s) => {
+            const l = sessionToLecture(s);
+            return {
+              id: s.session_id,
+              // 보관함 상세(API-12 · 37)는 아직 연결 전
+              href: null,
+              speaker: s.host_display_name,
+              title: s.title,
+              detail: s.my_question_count > 0 ? <>에서 질문 {s.my_question_count}개를 남겼어요</> : <>에 참여했어요</>,
+              emoji: l.emoji,
+            };
+          }),
+          open: open.map((s) => {
+            const l = sessionToLecture(s);
+            return { id: l.id, title: l.title, date: l.date, time: l.time, status: l.status === "live" ? "live" : "ready", tone: l.tone };
+          }),
+          myLectureCount: hosted.total_count,
+          avatars: [...new Set(joined.items.map((s) => s.host_display_name.slice(0, 1)))].slice(0, 3),
+        });
+      } catch (e) {
+        if (stopped) return;
+        if (e instanceof ApiError && e.code === "AUTH_REQUIRED") return router.replace(`/login?next=${encodeURIComponent("/home")}`);
+        // 불러오지 못하면 빈 홈을 보여준다 (문장 · 목록은 빈 상태 안내)
+        setData({ lectures: [], readyNotes: 0, archiveCount: 0, recent: [], open: [], myLectureCount: 0, avatars: [] });
+      }
+    })();
+    return () => {
+      stopped = true;
+    };
+  }, [router]);
+
+  return <HomeView name={name} data={data} />;
+}
+
+// ── 화면 ──
+function HomeView({ name, data }: { name: string; data: HomeData | null }) {
+  const today = useToday();
+  const plan =
+    data &&
+    buildToday({
+      lectures: data.lectures,
+      readyNotes: data.readyNotes,
+      archiveCount: data.archiveCount,
+      today: today && dateKey(new Date(today.year, today.month - 1, today.day)),
+    });
 
   return (
     <Screen nav dark width="wide">
@@ -38,21 +157,21 @@ export default function Home() {
             <p className="pt-1 text-right text-[15px] leading-tight">
               <span className="mr-1.5 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-coral" />
               {/* 날짜를 읽기 전에는 자리만 잡아 둔다 */}
-              {today ? `${today.month}월 ${today.day}일` : "\u00a0"}
+              {today ? `${today.month}월 ${today.day}일` : " "}
               <br />
-              <span className="text-white/45">{today?.weekday ?? "\u00a0"}</span>
+              <span className="text-white/45">{today?.weekday ?? " "}</span>
             </p>
           </div>
 
           <p className="mt-12 text-[25px] font-semibold leading-[1.45] md:text-[30px] tracking-[-0.035em] text-white/40">
-            <TodaySentence name={name} plan={plan} />
+            {plan ? <TodaySentence name={name} plan={plan} /> : <>{name}님, 오늘 할 일을 살펴보고 있어요…</>}
           </p>
 
-          {plan.kind !== "welcome" && (
+          {plan && plan.kind !== "welcome" && data.avatars.length > 0 && (
             <div className="mt-6 flex items-center gap-2 text-xs text-white/45">
               내 강연 · 보관함 기준
               <span className="flex -space-x-2">
-                {["김", "박", "이"].map((n) => (
+                {data.avatars.map((n) => (
                   <Avatar key={n} name={n} size={22} className="!ring-ink" />
                 ))}
               </span>
@@ -75,37 +194,40 @@ export default function Home() {
           <div className="mb-1 mt-7 flex items-center justify-between">
             <h2 className="text-[17px] font-bold">보관함에서:</h2>
             <Link href="/archive" className="flex items-center gap-1.5 text-sm">
-              전체 {myArchive.length}개 강연 <Icon name="right" size={15} />
+              전체 {data?.archiveCount ?? 0}개 강연 <Icon name="right" size={15} />
             </Link>
           </div>
-          {recent.length === 0 && (
+          {data && data.recent.length === 0 && (
             <p className="rounded-[22px] bg-white p-4 text-sm leading-relaxed text-muted">
               아직 참여한 강연이 없어요. QR로 강연에 들어가면 질문과 요약 노트가 여기 모여요.
             </p>
           )}
           <ul className="divide-y divide-line">
-            {recent.map((a) => {
-              const q = a.myQuestions[0];
+            {data?.recent.map((a) => {
+              const body = (
+                <>
+                  <Avatar name={a.speaker} size={46} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-bold">{a.speaker} 강연:</p>
+                    <p className="line-clamp-2 text-sm leading-snug text-muted">
+                      … {a.title}
+                      {a.detail && <> {a.detail}</>}
+                    </p>
+                  </div>
+                  <Sticker size={34} rotate={8}>
+                    {a.emoji}
+                  </Sticker>
+                </>
+              );
               return (
                 <li key={a.id}>
-                  <Link href={`/archive/${a.id}`} className="flex items-center gap-3 py-4">
-                    <Avatar name={a.speaker} size={46} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[15px] font-bold">{a.speaker} 강연:</p>
-                      <p className="line-clamp-2 text-sm leading-snug text-muted">
-                        … {a.title.split("·")[1]?.trim() ?? a.title}
-                        {q && (
-                          <>
-                            {" "}
-                            에서 <span className="text-ink">‘{q.text}’</span> 질문을 남겼어요
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <Sticker size={34} rotate={8}>
-                      {a.emoji}
-                    </Sticker>
-                  </Link>
+                  {a.href ? (
+                    <Link href={a.href} className="flex items-center gap-3 py-4">
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3 py-4">{body}</div>
+                  )}
                 </li>
               );
             })}
@@ -116,28 +238,28 @@ export default function Home() {
             <RoundButton href="/lectures/new" icon="plus" label="새 강연" />
           </div>
           <div className="space-y-2">
-            {openLectures.length === 0 && (
+            {data && data.open.length === 0 && (
               <Link href="/lectures/new" className="block rounded-[22px] bg-white p-4 text-sm leading-relaxed text-muted">
-                {myLectures.length === 0 ? "아직 만든 강연이 없어요." : "진행 중이거나 예정된 강연이 없어요."}{" "}
+                {data.myLectureCount === 0 ? "아직 만든 강연이 없어요." : "진행 중이거나 예정된 강연이 없어요."}{" "}
                 <span className="font-semibold text-ink underline underline-offset-4">새 강연 만들기</span>
               </Link>
             )}
-            {openLectures.map((l) => (
-                <Link
-                  key={l.id}
-                  href={l.status === "live" ? `/lectures/${l.id}/live` : `/lectures/${l.id}`}
-                  className="flex items-center gap-3 rounded-[22px] p-4"
-                  style={{ backgroundColor: tones[l.tone].hex }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-bold">{l.title}</p>
-                    <p className="text-xs text-ink/60">
-                      {l.date} {l.time}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">{l.status === "live" ? "대시보드" : "준비하기"}</span>
-                </Link>
-              ))}
+            {data?.open.map((l) => (
+              <Link
+                key={l.id}
+                href={l.status === "live" ? `/lectures/${l.id}/live` : `/lectures/${l.id}`}
+                className="flex items-center gap-3 rounded-[22px] p-4"
+                style={{ backgroundColor: tones[l.tone].hex }}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold">{l.title}</p>
+                  <p className="text-xs text-ink/60">
+                    {l.date} {l.time}
+                  </p>
+                </div>
+                <span className="rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white">{l.status === "live" ? "대시보드" : "준비하기"}</span>
+              </Link>
+            ))}
           </div>
         </section>
       </div>

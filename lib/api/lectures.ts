@@ -57,6 +57,12 @@ export function listHostedLectures(status?: "DRAFT" | "LIVE" | "ENDED", cursor?:
   return api.get<Paginated<Session>>("/sessions", { query: { scope: "hosted", status, cursor, limit: 100 } });
 }
 
+/** API-14 내가 청중으로 참여해 보관함에 둔 강연 (q: 강연명 · 강연자 검색) */
+export type JoinedSession = Session & { my_question_count: number };
+export function listJoinedLectures(q?: string, cursor?: string) {
+  return api.get<Paginated<JoinedSession>>("/sessions", { query: { scope: "joined", q: q?.trim() || undefined, cursor, limit: 100 } });
+}
+
 /** API-15 강연 상태와 내 권한 */
 export function getLecture(sid: string) {
   return api.get<Session>(`/sessions/${sid}`);
