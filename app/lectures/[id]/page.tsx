@@ -7,8 +7,10 @@ import { Bubble, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { QrModal, QrReissue } from "@/components/QrModal";
 import { Button, Empty, Modal, Progress, Screen, StatusPill, TopBar, inputCls, useToast } from "@/components/ui";
+import { RemoteLecturePrep } from "@/components/remote/LecturePrep";
 import { BUDGET_HELD_TEXT, FileStatePill, MAX_MB, SttConsentModal, budgetHeld, validateDeck } from "@/components/lecture";
 import { findLecture, statusOf, type FileState, type Lecture } from "@/lib/mock";
+import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo } from "@/lib/store";
 
 const stages = ["업로드", "텍스트 추출 · 청킹", "임베딩 · 색인", "용어 추출"];
@@ -16,7 +18,13 @@ const stages = ["업로드", "텍스트 추출 · 청킹", "임베딩 · 색인"
 const TERMS_MAX = 100;
 const TERM_LEN = 40;
 
-export default function LectureDetail() {
+// 데모는 목업 강연, 실제 API는 서버의 강연(API-15 · 22 등)
+export default function LectureDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  return DEMO ? <LectureDetail /> : <RemoteLecturePrep id={id} />;
+}
+
+function LectureDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();

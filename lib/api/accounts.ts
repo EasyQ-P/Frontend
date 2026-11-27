@@ -3,7 +3,7 @@
 import { api } from "./client";
 
 // 동의 문서 버전. 백엔드 기본값(SERVICE_POLICY_VERSION · TRAINING_POLICY_VERSION)과 같아야 한다
-export const POLICY = { SERVICE: "service-v1", TRAINING: "training-v1" } as const;
+export const POLICY = { SERVICE: "service-v1", TRAINING: "training-v1", STT: "stt-v1" } as const;
 
 export type SignupData = {
   user_id: string;
