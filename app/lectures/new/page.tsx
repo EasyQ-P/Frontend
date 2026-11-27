@@ -7,14 +7,17 @@ import { Button, Field, Screen, TopBar, inputCls } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { createLecture } from "@/lib/api/lectures";
 import { DEMO } from "@/lib/demo";
-import { lectureErrorMessage, localDateTime, todayInput } from "@/lib/lectures";
+import { lectureErrorMessage, localDateTime } from "@/lib/lectures";
 import { setDemo } from "@/lib/store";
+import { useToday } from "@/lib/useToday";
 
 export default function NewLecture() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  // 데모는 목업 기준일, 실제 API는 오늘
-  const [date, setDate] = useState(() => (DEMO ? "2026-10-22" : todayInput()));
+  // 날짜 기본값은 오늘(기기 시간). 빌드 시점 날짜가 박히지 않도록 브라우저에서 읽는다 → 고르기 전에는 null
+  const today = useToday();
+  const [picked, setDate] = useState<string | null>(null);
+  const date = picked ?? (today ? `${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}` : "");
   const [time, setTime] = useState("13:00");
   const [desc, setDesc] = useState("");
   const [touched, setTouched] = useState(false);
