@@ -7,9 +7,11 @@ import { Bubble, Logo, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { QrModal, QrReissue } from "@/components/QrModal";
 import { TeachingFiles } from "@/components/lecture";
+import { RemoteLectureLive } from "@/components/remote/LectureLive";
 import { SourceChips } from "@/components/SourceChips";
 import { Button, Empty, Modal, RoundButton, inputCls, useToast } from "@/components/ui";
 import { type AiQuestion, demoClock, findLecture, incomingQuestions, initialTranscript, liveAiQuestions, livePublicQuestions, type PublicQuestion, statusOf, toneCycle, transcriptScript } from "@/lib/mock";
+import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo } from "@/lib/store";
 
 // 음성 인식 상태. 불안정(unstable)한 동안의 발화는 인식 누락 구간으로 남긴다
@@ -30,7 +32,13 @@ const retractReasons: { value: RetractReason; label: string; desc: string }[] = 
   { value: "self", label: "제가 직접 답변할게요", desc: "AI 답변 대신 강연 중에 직접 설명할게요." },
 ];
 
-export default function LiveDashboard() {
+// 데모는 목업 대시보드, 실제 API는 강연 상태 · 참여 인원 · QR · 종료만 (질문 API 연결 전)
+export default function LiveDashboardPage() {
+  const { id } = useParams<{ id: string }>();
+  return DEMO ? <LiveDashboard /> : <RemoteLectureLive id={id} />;
+}
+
+function LiveDashboard() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();

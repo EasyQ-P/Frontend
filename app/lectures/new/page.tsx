@@ -4,20 +4,41 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Sticker } from "@/components/Brand";
 import { Button, Field, Screen, TopBar, inputCls } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
+import { createLecture } from "@/lib/api/lectures";
+import { DEMO } from "@/lib/demo";
+import { lectureErrorMessage, localDateTime, todayInput } from "@/lib/lectures";
 import { setDemo } from "@/lib/store";
 
 export default function NewLecture() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState("2026-10-22");
+  // 데모는 목업 기준일, 실제 API는 오늘
+  const [date, setDate] = useState(() => (DEMO ? "2026-10-22" : todayInput()));
   const [time, setTime] = useState("13:00");
   const [desc, setDesc] = useState("");
   const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!title.trim() || !date || !time) return;
+    if (!title.trim() || !date || !time || busy) return;
+    // 실제 API: 강연 생성(API-13) 후 준비 화면으로
+    if (!DEMO) {
+      setBusy(true);
+      setError("");
+      try {
+        const s = await createLecture({ title: title.trim(), description: desc.trim() || undefined, scheduledAt: localDateTime(date, time) });
+        router.push(`/lectures/${s.session_id}`);
+      } catch (err) {
+        setBusy(false);
+        if (err instanceof ApiError && err.code === "AUTH_REQUIRED") return router.push(`/login?next=${encodeURIComponent("/lectures/new")}`);
+        setError(lectureErrorMessage(err));
+      }
+      return;
+    }
     const d = new Date(date);
     const label = `${date.replaceAll("-", ".")} (${"일월화수목금토"[d.getDay()]})`;
     setDemo({ created: { id: "new-lecture", title: title.trim(), date: label, time, desc } });
@@ -52,9 +73,14 @@ export default function NewLecture() {
           </Field>
         </div>
 
+        {error && (
+          <p role="alert" className="mt-6 rounded-2xl bg-coral/15 p-3.5 text-sm text-coral-ink">
+            {error}
+          </p>
+        )}
         <div className="mt-auto pt-8">
-          <Button size="lg" className="w-full" type="submit">
-            만들고 교안 올리기
+          <Button size="lg" className="w-full" type="submit" disabled={busy}>
+            {busy ? "만드는 중…" : "만들고 교안 올리기"}
           </Button>
         </div>
       </form>
