@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Bubble, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
-import { Empty, PageTitle, RoundButton, Screen, StatusPill, Tabs } from "@/components/ui";
+import { Button, Empty, PageTitle, RoundButton, Screen, StatusPill, Tabs } from "@/components/ui";
 import { EndReasonPill } from "@/components/lecture";
 import { ApiError } from "@/lib/api/client";
 import { listHostedLectures } from "@/lib/api/lectures";
@@ -19,7 +19,7 @@ export default function LecturesPage() {
   return DEMO ? <Lectures /> : <RemoteLectures />;
 }
 
-type Loaded = { kind: "loading" } | { kind: "ok"; list: Lecture[]; total: number } | { kind: "error"; message: string };
+type Loaded = { kind: "loading" } | { kind: "ok"; list: Lecture[]; total: number } | { kind: "error"; message: string } | { kind: "guest" };
 
 function RemoteLectures() {
   const router = useRouter();
@@ -33,6 +33,8 @@ function RemoteLectures() {
       (e) => {
         if (stopped) return;
         if (e instanceof ApiError && e.code === "AUTH_REQUIRED") return router.replace(`/login?next=${encodeURIComponent("/lectures")}`);
+        // 게스트 세션(강연에 게스트로 입장한 뒤)은 회원 기능을 쓸 수 없다
+        if (e instanceof ApiError && e.code === "FORBIDDEN") return setLoaded({ kind: "guest" });
         setLoaded({ kind: "error", message: lectureErrorMessage(e) });
       },
     );
@@ -62,6 +64,11 @@ function RemoteLectures() {
         />
         {loaded.kind === "loading" && <p className="py-16 text-center text-sm text-muted">불러오는 중…</p>}
         {loaded.kind === "error" && <Empty emoji="⚠️" title="강연 목록을 불러오지 못했어요" desc={loaded.message} />}
+        {loaded.kind === "guest" && (
+          <Empty emoji="🔐" title="회원으로 로그인해야 볼 수 있어요" desc="지금은 게스트로 들어와 있어요. 회원으로 로그인하면 내 강연을(를) 볼 수 있어요.">
+            <Button href={`/login?next=${encodeURIComponent("/lectures")}`}>로그인</Button>
+          </Empty>
+        )}
         {loaded.kind === "ok" &&
           (list.length === 0 ? (
             <Empty title={all.length === 0 ? "아직 만든 강연이 없어요" : "해당하는 강연이 없어요"} desc={all.length === 0 ? "오른쪽 위 + 로 첫 강연을 만들어 보세요." : undefined} />

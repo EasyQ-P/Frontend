@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Avatar, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { RoundButton, Screen } from "@/components/ui";
-import { ApiError } from "@/lib/api/client";
+import { needsMemberLogin } from "@/lib/api/client";
 import { listDocuments, listHostedLectures, listJoinedLectures, type Session, type SessionDocument } from "@/lib/api/lectures";
 import { DEMO } from "@/lib/demo";
 import { buildToday, dateKey, type Today, type TodayLecture } from "@/lib/homeToday";
@@ -122,7 +122,8 @@ function RemoteHome() {
         });
       } catch (e) {
         if (stopped) return;
-        if (e instanceof ApiError && e.code === "AUTH_REQUIRED") return router.replace(`/login?next=${encodeURIComponent("/home")}`);
+        // 로그인 전(401) · 게스트 세션(403)이면 회원 로그인으로
+        if (needsMemberLogin(e)) return router.replace(`/login?next=${encodeURIComponent("/home")}`);
         // 불러오지 못하면 빈 홈을 보여준다 (문장 · 목록은 빈 상태 안내)
         setData({ lectures: [], readyNotes: 0, archiveCount: 0, recent: [], open: [], myLectureCount: 0, avatars: [] });
       }
