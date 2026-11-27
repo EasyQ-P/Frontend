@@ -31,6 +31,8 @@ export type FileState = "none" | "processing" | "failed" | "done";
 export type Lecture = {
   id: string;
   title: string;
+  // 홈 "오늘" 문장에 쓰는 짧은 이름. 없으면 제목에서 만든다 (lib/homeToday.ts)
+  short?: string;
   date: string;
   time: string;
   desc: string;
@@ -58,6 +60,7 @@ export const lectures: Lecture[] = [
   {
     id: "l1",
     title: "인공지능 개론 7주차 · 트랜스포머",
+    short: "트랜스포머 강연",
     date: "2026.10.22 (목)",
     time: "14:00",
     desc: "셀프 어텐션부터 인코더-디코더 구조까지",
@@ -73,6 +76,7 @@ export const lectures: Lecture[] = [
   {
     id: "l2",
     title: "데이터베이스 설계 특강",
+    short: "DB 특강",
     date: "2026.10.23 (금)",
     time: "10:30",
     desc: "정규화와 인덱스 설계 실습",

@@ -20,10 +20,10 @@ function snapshot() {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-export function useToday(): { month: number; day: number; weekday: string } | null {
+export function useToday(): { year: number; month: number; day: number; weekday: string } | null {
   const key = useSyncExternalStore(subscribe, snapshot, () => null);
   if (!key) return null;
   const [y, m, d] = key.split("-").map(Number);
   const weekday = new Date(y, m - 1, d).toLocaleDateString("ko-KR", { weekday: "long" });
-  return { month: m, day: d, weekday };
+  return { year: y, month: m, day: d, weekday };
 }
