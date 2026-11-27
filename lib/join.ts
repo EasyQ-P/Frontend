@@ -1,5 +1,5 @@
 // 입장 (API-18 · 19) 화면용 도우미: 서버 응답을 화면의 Lecture 모양으로 바꾸고, 오류 코드를 안내 문구로 바꾼다
-import { ApiError } from "./api/client";
+import { ApiError, UNREACHABLE_MESSAGE, isUnreachable } from "./api/client";
 import type { JoinPreview } from "./api/join";
 import type { Lecture } from "./mock";
 
@@ -49,7 +49,7 @@ export type JoinFailure = {
 };
 
 export function joinFailure(e: unknown): JoinFailure {
-  if (!(e instanceof ApiError)) return { message: "서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  if (isUnreachable(e) || !(e instanceof ApiError)) return { message: UNREACHABLE_MESSAGE };
   switch (e.code) {
     case "JOIN_CODE_INVALID":
       return { message: "입장 코드를 찾을 수 없어요. 다시 확인해 주세요.", badCode: true };
