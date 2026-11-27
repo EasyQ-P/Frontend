@@ -48,3 +48,12 @@ export function requestPasswordReset(email: string) {
 export function resetPassword(token: string, newPassword: string) {
   return api.post<void>("/auth/password-resets", { token, new_password: newPassword }, { csrf: false });
 }
+
+/** API-11 계정 단위 동의 변경. SERVICE 철회는 탈퇴로만 할 수 있어 여기서는 TRAINING만 바꾼다 */
+export function changeAccountConsent(purpose: "TRAINING", granted: boolean) {
+  return api.post<{ consent_id: string; purpose: string; policy_version: string; granted: boolean; recorded_at: string; deletion_job_id?: string }>("/me/consents", {
+    purpose,
+    policy_version: POLICY[purpose],
+    granted,
+  });
+}
