@@ -1,11 +1,14 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Bubble, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { Button, PageTitle, Screen, StatusPill, TopBar, inputCls } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
+import { getJoinPreview, participate, type JoinPreview } from "@/lib/api/join";
 import { DEMO } from "@/lib/demo";
+import { joinFailure, previewToLecture } from "@/lib/join";
 import { LEARN_CONSENT_TEXT, SESSION_CAPACITY, me, archiveHrefFor, resolveCode, statusOf, type Lecture, type LectureStatus } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
@@ -43,7 +46,8 @@ function Join() {
 
   // QR · 링크(/live/코드)로 들어오면 코드를 채운 채 입장 절차(누구로 · 동의)부터 시작한다
   const fromQr = useSearchParams().get("code")?.toUpperCase() ?? "";
-  const [initial] = useState(() => (fromQr ? evaluate(fromQr) : { lecture: null, error: "" }));
+  // 데모는 목업에서 바로 찾고, 실제 API는 아래 effect에서 API-18로 확인한다
+  const [initial] = useState(() => (DEMO && fromQr ? evaluate(fromQr) : { lecture: null, error: "" }));
   const [step, setStep] = useState<Step>(initial.lecture ? "who" : "code");
   const [code, setCode] = useState(fromQr);
   const [error, setError] = useState(initial.error);
@@ -52,12 +56,91 @@ function Join() {
   const [touched, setTouched] = useState(false);
   const [nick, setNick] = useState("");
   const [scanning, setScanning] = useState(false);
-
   // 잘못된 코드를 여러 번 넣으면 잠시 막는다 (429)
   const [fails, setFails] = useState(0);
+  // 실제 API: 확인 · 입장 요청 중(QR로 들어오면 처음부터 확인 중), 입장 실패 안내, 동의를 다시 받아야 하는 회원
+  const [busy, setBusy] = useState(!DEMO && !!fromQr);
+  const [joinError, setJoinError] = useState("");
+  const [consentAgain, setConsentAgain] = useState(false);
+  // 같은 입장 요청을 다시 보낼 때(연결 실패 · 503)만 같은 Idempotency-Key를 쓴다 → 같은 참가자로 이어진다
+  const attempt = useRef<{ body: string; key: string } | null>(null);
+
+  // 입장 코드 확인 결과 (API-18)
+  function showPreview(target: string, preview: JoinPreview) {
+    setBusy(false);
+    if (preview.is_full && !preview.already_joined) {
+      setError(`정원(${preview.capacity}명)이 가득 찬 강연이에요. 자리가 나면 다시 들어와 주세요.`);
+      return setStep("code");
+    }
+    attempt.current = null;
+    setJoinError("");
+    setConsentAgain(false);
+    setCode(target);
+    setLecture(previewToLecture(target, preview));
+    setStep("who");
+  }
+
+  function showLookupError(e: unknown) {
+    setBusy(false);
+    const f = joinFailure(e);
+    if (f.badCode) setFails((n) => n + 1);
+    setError(f.message);
+    setStep("code");
+  }
+
+  function lookup(c: string) {
+    const target = c.trim().toUpperCase();
+    setBusy(true);
+    getJoinPreview(target).then((p) => showPreview(target, p), showLookupError);
+  }
+
+  // QR · 링크로 들어온 첫 화면 (실제 API). 결과는 응답 콜백에서 반영한다
+  useEffect(() => {
+    if (DEMO || !fromQr) return;
+    let stopped = false;
+    getJoinPreview(fromQr).then(
+      (p) => !stopped && showPreview(fromQr, p),
+      (e) => !stopped && showLookupError(e),
+    );
+    return () => {
+      stopped = true;
+    };
+  }, [fromQr]);
+
+  // 입장 (API-19)
+  async function join(asGuest: boolean, serviceConsent = false) {
+    const c = code.trim().toUpperCase();
+    const loginNext = `/login?next=${encodeURIComponent(`/join?code=${c}`)}`;
+    if (!asGuest && !authed) return router.push(loginNext);
+    const body = JSON.stringify({ c, asGuest, nick: nick.trim(), learn: agree.learn, serviceConsent });
+    const key = attempt.current?.body === body ? attempt.current.key : crypto.randomUUID();
+    setBusy(true);
+    setJoinError("");
+    try {
+      const p = await participate({ code: c, guest: asGuest ? { nickname: nick.trim(), training: agree.learn } : undefined, serviceConsent }, key);
+      attempt.current = null;
+      setDemo({ guestName: p.kind === "GUEST" ? (p.nickname ?? nick.trim()) : null, joinedCode: c });
+      router.push(`/live/${c}`);
+    } catch (e) {
+      const retryable = !(e instanceof ApiError) || e.retryable || e.status >= 500;
+      attempt.current = retryable ? { body, key } : null;
+      const f = joinFailure(e);
+      setBusy(false);
+      if (f.relogin) return router.push(loginNext);
+      // 다시 동의하고 보냈는데도 막히면 계정 단위 동의가 없는 경우다(이 화면에서 해결할 수 없음)
+      if (f.consentRequired && serviceConsent) {
+        setConsentAgain(false);
+        return setJoinError("계정의 서비스 이용 동의 기록이 없어 입장할 수 없어요. 내 정보에서 동의 상태를 확인해 주세요.");
+      }
+      setConsentAgain(!!f.consentRequired);
+      setJoinError(f.message);
+    }
+  }
+
 
   function check(c: string) {
     if (fails >= MAX_FAILS) return setError("입장 코드 입력 횟수를 넘었어요. 잠시 후 다시 시도해 주세요.");
+    if (!DEMO) return lookup(c);
     const r = evaluate(c);
     if (!r.lecture) {
       if (r.error.startsWith("입장 코드를 찾을 수 없어요")) setFails((n) => n + 1);
@@ -68,6 +151,8 @@ function Join() {
   }
 
   function scan() {
+    // 실제 서비스: 휴대폰 기본 카메라로 QR을 찍으면 /join?code=… 로 바로 들어온다
+    if (!DEMO) return setError("휴대폰 기본 카메라로 강연장 QR을 찍으면 이 화면이 바로 열려요. 아래에 입장 코드를 입력해도 돼요.");
     setScanning(true);
     setTimeout(() => {
       setScanning(false);
@@ -81,6 +166,7 @@ function Join() {
   // (DRAFT → 대기 화면, LIVE → 질문 화면, ENDED → 내 보관함의 해당 강연 상세). 아니면 로그인한 뒤 돌아온다
   function enter(asGuest: boolean) {
     if (!lecture) return;
+    if (!DEMO) return void join(asGuest);
     const current = codes[lecture.id] ?? lecture.code;
     setDemo({ guestName: asGuest ? nick.trim() : null, joinedCode: current });
     if (!asGuest && !authed) return router.push(`/login?next=${encodeURIComponent(`/live/${current}`)}`);
@@ -138,8 +224,8 @@ function Join() {
                 }}
                 placeholder="QX7K2"
               />
-              <Button size="lg" className="shrink-0" disabled={code.length < 5} type="submit">
-                입장
+              <Button size="lg" className="shrink-0" disabled={code.length < 5 || busy} type="submit">
+                {busy ? "확인 중…" : "입장"}
               </Button>
             </div>
             {error && (
@@ -160,7 +246,17 @@ function Join() {
             <br />
             <span className="text-ink/35">들어갈까요?</span>
           </h2>
-          <button onClick={() => enter(false)} className="mt-8 flex items-center gap-4 rounded-[24px] bg-ink p-5 text-left text-white transition-transform hover:-translate-y-0.5">
+          {joinError && (
+            <div role="alert" className="mt-6 rounded-2xl bg-coral/15 p-3.5 text-sm text-coral-ink">
+              {joinError}
+              {consentAgain && (
+                <Button size="sm" className="mt-3 w-full" disabled={busy} onClick={() => join(false, true)}>
+                  서비스 이용에 다시 동의하고 입장
+                </Button>
+              )}
+            </div>
+          )}
+          <button onClick={() => enter(false)} disabled={busy} className="mt-8 flex items-center gap-4 rounded-[24px] bg-ink p-5 text-left text-white transition-transform hover:-translate-y-0.5">
             <Sticker size={36} rotate={-6}>
               🙋
             </Sticker>
@@ -173,7 +269,7 @@ function Join() {
             </span>
             <Icon name="right" className="text-white/50" />
           </button>
-          <button onClick={() => setStep("guest")} className="mt-3 flex items-center gap-4 rounded-[24px] bg-white p-5 text-left transition-transform hover:-translate-y-0.5">
+          <button onClick={() => setStep("guest")} disabled={busy} className="mt-3 flex items-center gap-4 rounded-[24px] bg-white p-5 text-left transition-transform hover:-translate-y-0.5">
             <Sticker size={36} rotate={8}>
               🕶️
             </Sticker>
@@ -236,8 +332,13 @@ function Join() {
           </div>
           <p className="mt-3 text-xs text-muted">필수 항목에 동의해야 입장할 수 있어요. 선택 항목은 동의하지 않아도 돼요.</p>
 
-          <Button size="lg" className="mt-auto w-full" type="submit" disabled={!nick.trim() || !agree.keep}>
-            동의하고 입장
+          {joinError && (
+            <p role="alert" className="mt-4 rounded-2xl bg-coral/15 p-3.5 text-sm text-coral-ink">
+              {joinError}
+            </p>
+          )}
+          <Button size="lg" className="mt-auto w-full" type="submit" disabled={!nick.trim() || !agree.keep || busy}>
+            {busy ? "입장 중…" : "동의하고 입장"}
           </Button>
         </form>
       )}
