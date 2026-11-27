@@ -13,6 +13,8 @@ type DemoState = {
   // 회원 로그인 여부와 마지막 로그인 시각. 탈퇴는 최근 10분 안에 로그인한 상태여야 한다
   authed: boolean;
   loginAt: number;
+  // 서버 세션이 관리자(ADMIN) 계정인지. 관리자는 회원 탈퇴를 할 수 없다(API-40 403)
+  isAdmin: boolean;
   // 가입했지만 아직 인증 코드를 입력하지 않은 계정. 인증 전에 로그인하면 코드 입력 화면으로 보낸다
   signup: { name: string; email: string; pw: string; verified: boolean } | null;
   deletedArchives: string[];
@@ -50,6 +52,7 @@ let state: DemoState = {
   name: me.name,
   authed: false,
   loginAt: 0,
+  isAdmin: false,
   signup: null,
   deletedArchives: [],
   deletedLectures: [],
@@ -108,12 +111,12 @@ export function restoreMember() {
 }
 
 // 실제 API: 서버 세션 확인 결과(API-06 → API-09)를 반영한다. 서버가 기준이고 탭에 남긴 값은 로그인 시각에만 쓴다
-export function applyServerSession(user: { display_name: string } | null) {
+export function applyServerSession(user: { display_name: string; role: "MEMBER" | "ADMIN" } | null) {
   if (!user) {
-    if (state.authed) setDemo({ authed: false, loginAt: 0 });
+    if (state.authed || state.isAdmin) setDemo({ authed: false, loginAt: 0, isAdmin: false });
     return;
   }
-  setDemo({ authed: true, name: user.display_name, loginAt: state.loginAt || savedMember()?.loginAt || 0 });
+  setDemo({ authed: true, name: user.display_name, isAdmin: user.role === "ADMIN", loginAt: state.loginAt || savedMember()?.loginAt || 0 });
 }
 
 // 관리자 로그인은 새로고침해도 풀리지 않도록 sessionStorage에 남긴다
@@ -124,7 +127,7 @@ export function setAdmin(email: string | null) {
     if (email) sessionStorage.setItem(ADMIN_KEY, email);
     else sessionStorage.removeItem(ADMIN_KEY);
   } catch {}
-  setDemo({ admin: email });
+  setDemo(email ? { admin: email } : { admin: null, isAdmin: false });
 }
 
 export function restoreAdmin() {

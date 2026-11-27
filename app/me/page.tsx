@@ -17,7 +17,7 @@ const REAUTH_MS = 10 * 60 * 1000;
 export default function Me() {
   const router = useRouter();
   const toast = useToast();
-  const { name, consent, loginAt, signup, endedLectures, startedLectures, deletedArchives, deletedLectures } = useDemo();
+  const { name, consent, loginAt, signup, endedLectures, startedLectures, deletedArchives, deletedLectures, isAdmin, admin } = useDemo();
   const myArchive = archive.filter((a) => !deletedArchives.includes(a.id));
   const [sheet, setSheet] = useState<Sheet>(null);
   const [draftName, setDraftName] = useState(name);
@@ -77,7 +77,7 @@ export default function Me() {
           <button
             onClick={async () => {
               await logout();
-              setDemo({ authed: false, loginAt: 0 });
+              setDemo({ authed: false, loginAt: 0, isAdmin: false });
               router.push("/");
             }}
             className="flex w-full items-center gap-3 rounded-[20px] bg-white px-4 py-4 text-left"
@@ -86,9 +86,12 @@ export default function Me() {
             <span className="flex-1">로그아웃</span>
           </button>
         </div>
-        <button onClick={() => setSheet(Date.now() - loginAt < REAUTH_MS ? "leave" : "reauth")} className="mx-auto mb-6 mt-6 block text-sm text-muted underline underline-offset-4">
-          회원 탈퇴
-        </button>
+        {/* 관리자 계정은 탈퇴할 수 없다(서버 403). 관리자로 로그인한 채 /me에 들어와도 버튼을 숨긴다 */}
+        {!(isAdmin || admin) && (
+          <button onClick={() => setSheet(Date.now() - loginAt < REAUTH_MS ? "leave" : "reauth")} className="mx-auto mb-6 mt-6 block text-sm text-muted underline underline-offset-4">
+            회원 탈퇴
+          </button>
+        )}
       </div>
 
       {/* 표시명 */}
