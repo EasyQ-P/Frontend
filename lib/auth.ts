@@ -1,7 +1,7 @@
 // 로그인 검증. 데모 모드(NEXT_PUBLIC_DEMO=true)는 목업 계정(members, adminAccount)으로,
 // 그 밖에는 auth 서버(API-04 · 05)로 판정한다.
 import { adminAccount, members } from "./admin";
-import { ApiError } from "./api/client";
+import { ApiError, UNREACHABLE_MESSAGE, isUnreachable } from "./api/client";
 import * as authApi from "./api/auth";
 import { DEMO } from "./demo";
 
@@ -62,7 +62,7 @@ async function apiLogin(email: string, pw: string, role: "user" | "admin"): Prom
 }
 
 function loginError(e: unknown): LoginResult {
-  if (!(e instanceof ApiError)) return { ok: false, field: "form", message: "서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  if (isUnreachable(e) || !(e instanceof ApiError)) return { ok: false, field: "form", message: UNREACHABLE_MESSAGE };
   switch (e.code) {
     case "AUTH_INVALID_CREDENTIALS":
       return wrong;

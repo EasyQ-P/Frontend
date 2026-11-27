@@ -25,6 +25,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 서버(API)에 닿지 못한 실패: 네트워크 오류, 또는 API 대신 다른 응답(HTML 404 · 프록시 502 등)이 온 경우.
+ * API 오류는 늘 {request_id, error}로 오므로, 그 모양이 아니면 code가 HTTP_<상태>가 된다
+ */
+export function isUnreachable(e: unknown) {
+  return !(e instanceof ApiError) || e.code.startsWith("HTTP_");
+}
+
+export const UNREACHABLE_MESSAGE = "서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.";
+
+/** 회원만 쓸 수 있는 기능에 로그인 없이(401) 또는 게스트 세션으로(403) 들어온 경우 */
+export function needsMemberLogin(e: unknown) {
+  return e instanceof ApiError && (e.code === "AUTH_REQUIRED" || e.code === "FORBIDDEN");
+}
+
 // ── CSRF 토큰 (메모리 보관) ──
 let csrfToken: string | null = null;
 let csrfRefresh: Promise<string | null> | null = null;

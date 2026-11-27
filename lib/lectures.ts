@@ -1,5 +1,5 @@
 // 강연 · 교안 (API-13 ~ 25) 화면용 도우미: 서버 응답 → 화면 모양, 오류 코드 → 안내 문구
-import { ApiError } from "./api/client";
+import { ApiError, UNREACHABLE_MESSAGE, isUnreachable } from "./api/client";
 import type { Session, SessionDocument } from "./api/lectures";
 import { formatSchedule } from "./join";
 import type { Lecture, LectureStatus, Tone } from "./mock";
@@ -73,7 +73,7 @@ export function documentFailReason(d: SessionDocument) {
 
 // ── 오류 문구 ──
 export function lectureErrorMessage(e: unknown) {
-  if (!(e instanceof ApiError)) return "서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.";
+  if (isUnreachable(e) || !(e instanceof ApiError)) return UNREACHABLE_MESSAGE;
   switch (e.code) {
     case "VERSION_CONFLICT":
       return "다른 화면에서 강연 정보가 바뀌었어요. 새로고침한 뒤 다시 시도해 주세요.";

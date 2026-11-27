@@ -1,7 +1,7 @@
 // 가입 · 이메일 인증 · 비밀번호 재설정. 데모 모드(NEXT_PUBLIC_DEMO=true)는 목업으로,
 // 그 밖에는 auth 서버(API-01 · 02 · 03 · 07 · 08)로 처리한다. 화면은 결과의 field · message만 보여 주면 된다
 import * as accountsApi from "./api/accounts";
-import { ApiError } from "./api/client";
+import { ApiError, UNREACHABLE_MESSAGE, isUnreachable } from "./api/client";
 import { MOCK_VERIFY_CODE, undeliverableEmail } from "./auth";
 import { DEMO } from "./demo";
 
@@ -12,7 +12,7 @@ const mockDelay = () => new Promise((r) => setTimeout(r, 600));
 
 // 여러 API에 공통인 실패 (연결 끊김 · 요청 한도 · 입력 오류)
 function common(e: unknown, action: string): Fail {
-  if (!(e instanceof ApiError)) return { ok: false, field: "form", message: "서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  if (isUnreachable(e) || !(e instanceof ApiError)) return { ok: false, field: "form", message: UNREACHABLE_MESSAGE };
   if (e.code === "RATE_LIMITED") {
     const wait = e.retryAfter ? `${Math.max(1, Math.ceil(e.retryAfter / 60))}분 뒤에` : "잠시 후";
     return { ok: false, field: "form", message: `${action} 요청이 너무 많아요. ${wait} 다시 시도해 주세요.` };

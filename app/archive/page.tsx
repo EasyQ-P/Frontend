@@ -28,7 +28,7 @@ export default function ArchivePage() {
   return DEMO ? <Archive /> : <RemoteArchive />;
 }
 
-type Loaded = { kind: "loading" } | { kind: "ok"; items: JoinedSession[]; total: number } | { kind: "error"; message: string };
+type Loaded = { kind: "loading" } | { kind: "ok"; items: JoinedSession[]; total: number } | { kind: "error"; message: string } | { kind: "guest" };
 
 function RemoteArchive() {
   const router = useRouter();
@@ -47,6 +47,8 @@ function RemoteArchive() {
           (e) => {
             if (stopped) return;
             if (e instanceof ApiError && e.code === "AUTH_REQUIRED") return router.replace(`/login?next=${encodeURIComponent("/archive")}`);
+            // 게스트 세션(강연에 게스트로 입장한 뒤)은 보관함이 없다
+            if (e instanceof ApiError && e.code === "FORBIDDEN") return setLoaded({ kind: "guest" });
             setLoaded({ kind: "error", message: lectureErrorMessage(e) });
           },
         ),
@@ -77,6 +79,11 @@ function RemoteArchive() {
 
         {loaded.kind === "loading" && <p className="py-16 text-center text-sm text-muted">불러오는 중…</p>}
         {loaded.kind === "error" && <Empty emoji="⚠️" title="보관함을 불러오지 못했어요" desc={loaded.message} />}
+        {loaded.kind === "guest" && (
+          <Empty emoji="🔐" title="회원으로 로그인해야 볼 수 있어요" desc="지금은 게스트로 들어와 있어요. 회원으로 로그인하면 보관함을(를) 볼 수 있어요.">
+            <Button href={`/login?next=${encodeURIComponent("/archive")}`}>로그인</Button>
+          </Empty>
+        )}
         {loaded.kind === "ok" &&
           (items.length === 0 ? (
             <Empty title={q ? "검색 결과가 없어요" : "아직 참여한 강연이 없어요"} desc="QR을 찍고 강연에 참여하면 여기에 모여요.">
