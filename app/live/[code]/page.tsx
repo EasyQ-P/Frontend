@@ -7,7 +7,9 @@ import { Icon } from "@/components/Icon";
 import { NoteModal } from "@/components/NoteModal";
 import { SourceChips } from "@/components/SourceChips";
 import { Button, Empty, RoundButton, Screen, Tabs, useToast } from "@/components/ui";
+import { getJoinPreview, type JoinPreview } from "@/lib/api/join";
 import { DEMO } from "@/lib/demo";
+import { joinFailure, previewToLecture, type JoinFailure } from "@/lib/join";
 import { SESSION_CAPACITY, archiveHrefFor, cannedAnswers, discardedDrafts, demoClock, resolveCode, statusOf, liveAiQuestions, livePublicQuestions, type Lecture, type PublicQuestion, type Source, toneCycle } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
@@ -33,7 +35,107 @@ const Q_MAX = 200;
 // 새 질문 시각은 목업 강연 시간대 기준으로 찍는다
 const now = demoClock;
 
-export default function AudienceLive() {
+// 데모는 목업 강연으로, 실제 API는 서버의 강연 상태(API-18)로 화면을 고른다
+export default function AudienceLivePage() {
+  const { code } = useParams<{ code: string }>();
+  return DEMO ? <AudienceLive /> : <RemoteAudience code={code.toUpperCase()} />;
+}
+
+type Remote = { kind: "loading" } | { kind: "ok"; preview: JoinPreview } | { kind: "error"; failure: JoinFailure };
+
+// 실제 API: 입장한 강연의 상태를 확인한다. 시작 전이면 10초마다 다시 확인해 시작되면 화면을 바꾼다
+// (WebSocket session.updated를 붙이면 바로 바뀌게 할 수 있다)
+function RemoteAudience({ code }: { code: string }) {
+  const router = useRouter();
+  const { name, authed, guestName } = useDemo();
+  const [remote, setRemote] = useState<Remote>({ kind: "loading" });
+
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async () => {
+      try {
+        const preview = await getJoinPreview(code);
+        if (stopped) return;
+        setRemote({ kind: "ok", preview });
+        // 입장 절차를 거치지 않았으면(또는 새 기기 · 만료) 입장 화면으로
+        if (!preview.already_joined) return router.replace(`/join?code=${code}`);
+        if (preview.status === "DRAFT") timer = setTimeout(load, 10_000);
+      } catch (e) {
+        if (!stopped) setRemote({ kind: "error", failure: joinFailure(e) });
+      }
+    };
+    void load();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [code, router]);
+
+  if (remote.kind === "loading" || (remote.kind === "ok" && !remote.preview.already_joined)) return <Screen>{null}</Screen>;
+
+  if (remote.kind === "error") {
+    const { failure } = remote;
+    const member = authed && guestName === null;
+    return (
+      <Screen>
+        {failure.ended ? (
+          <Empty emoji="🏁" title="강연이 끝났어요" desc={member ? "내 질문과 요약 노트는 보관함에서 다시 볼 수 있어요." : "질문 접수가 마감됐어요. 참여해 주셔서 고마워요."}>
+            <Button href={member ? "/archive" : "/"}>{member ? "보관함 보기" : "처음 화면으로"}</Button>
+          </Empty>
+        ) : (
+          <Empty emoji="🔍" title="강연에 들어갈 수 없어요" desc={failure.message}>
+            <Button href="/join">입장 코드 입력하기</Button>
+          </Empty>
+        )}
+      </Screen>
+    );
+  }
+
+  const lecture = previewToLecture(code, remote.preview);
+  const who = `${guestName ?? (authed ? name : "게스트")}님`;
+  if (remote.preview.status === "DRAFT") return <Waiting lecture={lecture} who={who} />;
+  return <LiveSoon lecture={lecture} who={who} />;
+}
+
+// 실제 API: 강연은 진행 중인데 질문 API(API-26~36)가 아직 없어 질문 화면 대신 안내를 보여준다
+function LiveSoon({ lecture, who }: { lecture: Lecture; who: string }) {
+  return (
+    <Screen>
+      <header className="px-5 pt-5">
+        <RoomHeader
+          who={who}
+          badge={
+            <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-semibold">
+              <span className="h-1.5 w-1.5 rounded-full bg-coral" /> 진행 중
+            </span>
+          }
+        />
+      </header>
+      <div className="flex flex-1 flex-col px-5 pb-10 pt-6">
+        <Bubble tone={lecture.tone}>
+          <p className="text-[24px] font-extrabold leading-tight tracking-[-0.04em]">{lecture.title}</p>
+          <p className="mt-1 text-sm text-ink/60">
+            {lecture.host} · {lecture.audience}명 참여 중
+          </p>
+        </Bubble>
+        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+          <Sticker size={72} rotate={-8} float>
+            🛠️
+          </Sticker>
+          <p className="mt-6 text-[24px] font-extrabold tracking-[-0.04em]">입장했어요</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            질문하기 기능은 곧 연결돼요.
+            <br />
+            강연은 지금 진행 중이에요.
+          </p>
+        </div>
+      </div>
+    </Screen>
+  );
+}
+
+function AudienceLive() {
   const { code } = useParams<{ code: string }>();
   const router = useRouter();
   const { name, authed, guestName, endedLectures, startedLectures, codes, joinedCode } = useDemo();
