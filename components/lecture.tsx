@@ -19,9 +19,18 @@ export async function validateDeck(f: File): Promise<string | null> {
   return ok ? null : "파일이 손상됐거나 열 수 없어요. 원본 파일을 다시 저장해서 올려 주세요.";
 }
 
-export function FileStatePill({ state }: { state: FileState }) {
+// 예산 한도로 보류된 교안 (status = PENDING, error_code = BUDGET_EXCEEDED)
+export const budgetHeld = (f: { state: FileState; errorCode?: string }) => f.state === "pending" && f.errorCode === "BUDGET_EXCEEDED";
+export const BUDGET_HELD_TEXT = "예산 한도로 처리가 보류되었어요";
+
+export function FileStatePill({ state, errorCode }: { state: FileState; errorCode?: string }) {
   if (state === "none") return null;
-  const [cls, label] = { processing: ["bg-honey/40", "처리 중"], done: ["bg-mint/25", "완료"], failed: ["bg-[#e5484d]/12 text-[#e5484d]", "실패"] }[state];
+  const [cls, label] = {
+    pending: budgetHeld({ state, errorCode }) ? ["bg-coral/20 text-coral-ink", "보류"] : ["bg-sand", "처리 대기"],
+    processing: ["bg-honey/40", "처리 중"],
+    done: ["bg-mint/25", "완료"],
+    failed: ["bg-[#e5484d]/12 text-[#e5484d]", "실패"],
+  }[state];
   return <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{label}</span>;
 }
 
@@ -113,9 +122,12 @@ export function SttConsentModal({ open, onClose, onConfirm, noFile = false }: { 
 
 // ── 교안 목록 ─────────────────────────────────────
 
-export type DeckFile = { id: string; name: string; pages: number; state: FileState; failReason?: string; progress?: number };
+export type DeckFile = { id: string; name: string; pages: number; state: FileState; failReason?: string; progress?: number; chunks?: number; errorCode?: string };
 
-// LIVE: 추가 업로드만 (삭제 없음) · ENDED: 삭제만. 처리 상태는 처리 중 / 완료 / 실패로 보여준다
+// 조각(검색 인덱스)이 하나도 없는 실패 교안. 강연 중에도 지울 수 있다(API-24) → 지운 뒤 새 파일을 올리면 된다
+const failedWithoutChunks = (f: DeckFile) => f.state === "failed" && !f.chunks;
+
+// LIVE: 추가 업로드 + 조각이 없는 실패 교안만 삭제 · ENDED: 삭제만. 처리 상태는 대기(보류) / 처리 중 / 완료 / 실패로 보여준다
 export function TeachingFiles({ initial, canUpload, canDelete }: { initial: DeckFile[]; canUpload: boolean; canDelete: boolean }) {
   const [files, setFiles] = useState(initial);
   const [error, setError] = useState("");
@@ -125,7 +137,7 @@ export function TeachingFiles({ initial, canUpload, canDelete }: { initial: Deck
   const toast = useToast();
   const showToast = toast.show;
 
-  // 처리 진행 시뮬레이션. 데모: 이름에 fail이 들어간 파일은 실패한다
+  // 처리 진행 시뮬레이션. 데모: 이름에 fail이 들어간 파일은 실패하고, budget이 들어간 파일은 예산 한도로 보류된다
   const processing = files.some((f) => f.state === "processing");
   useEffect(() => {
     if (!processing) return;
@@ -136,7 +148,8 @@ export function TeachingFiles({ initial, canUpload, canDelete }: { initial: Deck
           if (f.state !== "processing") return f;
           const progress = Math.min(100, (f.progress ?? 0) + 8 + Math.random() * 10);
           if (progress < 100) return { ...f, progress };
-          if (/fail/i.test(f.name)) return { ...f, progress, state: "failed", failReason: "텍스트를 추출하지 못했어요. 스캔한 PDF일 수 있어요." };
+          if (/fail/i.test(f.name)) return { ...f, progress, state: "failed", chunks: 0, failReason: "텍스트를 추출하지 못했어요. 스캔한 PDF일 수 있어요." };
+          if (/budget/i.test(f.name)) return { ...f, progress: 0, state: "pending", errorCode: "BUDGET_EXCEEDED" };
           finished.push(f.name);
           return { ...f, progress, state: "done" };
         }),
@@ -168,10 +181,12 @@ export function TeachingFiles({ initial, canUpload, canDelete }: { initial: Deck
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold">{f.name}</p>
-                <p className="text-xs text-muted">{f.state === "processing" ? "AI가 교안을 읽는 중이에요" : f.state === "failed" ? "처리 실패" : `${f.pages}쪽`}</p>
+                <p className="text-xs text-muted">
+                  {f.state === "processing" ? "AI가 교안을 읽는 중이에요" : f.state === "failed" ? "처리 실패" : f.state === "pending" ? (budgetHeld(f) ? BUDGET_HELD_TEXT : "처리 대기 중이에요") : `${f.pages}쪽`}
+                </p>
               </div>
-              <FileStatePill state={f.state} />
-              {canDelete && f.state !== "processing" && (
+              <FileStatePill state={f.state} errorCode={f.errorCode} />
+              {f.state !== "processing" && (canDelete || failedWithoutChunks(f)) && (
                 <button onClick={() => setRemoving(f)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-ink/5" aria-label={`${f.name} 삭제`}>
                   <Icon name="trash" size={16} />
                 </button>

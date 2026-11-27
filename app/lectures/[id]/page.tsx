@@ -2,13 +2,15 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { FakeQR } from "@/components/FakeQR";
+import { JoinQr } from "@/components/JoinQr";
 import { Bubble, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { QrModal, QrReissue } from "@/components/QrModal";
 import { Button, Empty, Modal, Progress, Screen, StatusPill, TopBar, inputCls, useToast } from "@/components/ui";
-import { FileStatePill, MAX_MB, SttConsentModal, validateDeck } from "@/components/lecture";
+import { RemoteLecturePrep } from "@/components/remote/LecturePrep";
+import { BUDGET_HELD_TEXT, FileStatePill, MAX_MB, SttConsentModal, budgetHeld, validateDeck } from "@/components/lecture";
 import { findLecture, statusOf, type FileState, type Lecture } from "@/lib/mock";
+import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo } from "@/lib/store";
 
 const stages = ["업로드", "텍스트 추출 · 청킹", "임베딩 · 색인", "용어 추출"];
@@ -16,7 +18,13 @@ const stages = ["업로드", "텍스트 추출 · 청킹", "임베딩 · 색인"
 const TERMS_MAX = 100;
 const TERM_LEN = 40;
 
-export default function LectureDetail() {
+// 데모는 목업 강연, 실제 API는 서버의 강연(API-15 · 22 등)
+export default function LectureDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  return DEMO ? <LectureDetail /> : <RemoteLecturePrep id={id} />;
+}
+
+function LectureDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
@@ -35,6 +43,7 @@ export default function LectureDetail() {
   const [qrOpen, setQrOpen] = useState(false);
   const [warn, setWarn] = useState(false);
   const [sttOpen, setSttOpen] = useState(false);
+  const [del, setDel] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 교안 처리 진행 시뮬레이션
@@ -44,12 +53,17 @@ export default function LectureDetail() {
     if (!processing) return;
     const t = setTimeout(() => {
       if (progress < 100) return setProgress(Math.min(100, progress + 4 + Math.random() * 6));
+      // 데모: 이름에 budget이 들어간 파일은 예산 한도로 보류된다 (status = PENDING, error_code = BUDGET_EXCEEDED)
+      if (file && /budget/i.test(file.name)) {
+        setProgress(0);
+        return setFile((f) => (f ? { ...f, state: "pending", errorCode: "BUDGET_EXCEEDED" } : f));
+      }
       setFile((f) => (f ? { ...f, state: "done", chunks: f.chunks || 128 } : f));
       setTerms((ts) => (ts.length ? ts : ["정규화", "Normal Form", "Index", "B-Tree", "Primary Key", "Foreign Key", "Join", "Transaction"]));
       showToast("교안 준비가 끝났어요!", "mint");
     }, 350);
     return () => clearTimeout(t);
-  }, [processing, progress, showToast]);
+  }, [processing, progress, showToast, file]);
 
   // 준비 화면은 시작 전 강연만. 진행 중이면 대시보드, 끝났으면 리포트로 보낸다
   const status = base ? statusOf(base, endedLectures, startedLectures) : null;
@@ -80,7 +94,7 @@ export default function LectureDetail() {
 
   function start(f: NonNullable<Lecture["file"]>) {
     setProgress(0);
-    setFile({ ...f, state: "processing", failReason: undefined });
+    setFile({ ...f, state: "processing", failReason: undefined, errorCode: undefined });
   }
 
   // 교안이 없어도 시작할 수 있다. 처리 중 · 실패면 경고만 하고, 시작 전에 음성 인식 동의를 받는다
@@ -152,9 +166,9 @@ export default function LectureDetail() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold">{file.name}</p>
-                  <p className="text-xs text-muted">{fileLabel(file.state, file.pages, file.chunks)}</p>
+                  <p className="text-xs text-muted">{budgetHeld(file) ? BUDGET_HELD_TEXT : fileLabel(file.state, file.pages, file.chunks)}</p>
                 </div>
-                <FileStatePill state={file.state} />
+                <FileStatePill state={file.state} errorCode={file.errorCode} />
                 {/* 교안 삭제는 시작 전(DRAFT)과 종료 후에만 할 수 있다 */}
                 {file.state !== "processing" && (
                   <button
@@ -185,6 +199,15 @@ export default function LectureDetail() {
                       </li>
                     ))}
                   </ol>
+                </div>
+              )}
+
+              {budgetHeld(file) && (
+                <div className="mt-4 rounded-2xl bg-coral/12 p-3">
+                  <p className="flex items-center gap-1.5 text-sm font-bold text-coral-ink">
+                    <Icon name="alert" size={16} /> {BUDGET_HELD_TEXT}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">이번 달 AI 처리 예산 한도에 걸려 교안 처리를 잠시 멈췄어요. 교안 없이도 강연을 시작할 수 있어요.</p>
                 </div>
               )}
 
@@ -250,7 +273,7 @@ export default function LectureDetail() {
         {/* 3. QR */}
         <Step n={3} title="청중 입장 QR" done desc="강연을 시작하면 청중이 이 QR로 들어와요.">
           <div className="flex items-center gap-4 rounded-[24px] bg-white p-4">
-            <FakeQR code={code} size={112} />
+            <JoinQr code={code} size={112} />
             <div className="flex-1">
               <p className="text-xs text-muted">입장 코드</p>
               <p className="text-3xl font-extrabold tracking-[0.2em]">{code}</p>
@@ -266,6 +289,11 @@ export default function LectureDetail() {
             </div>
           </div>
         </Step>
+
+        {/* 시작 전(DRAFT) 강연 삭제 (API-40 SESSION). 진행 중(LIVE)에는 서버가 409로 막는다 */}
+        <button onClick={() => setDel(true)} className="mt-8 flex w-full items-center justify-center gap-1.5 text-sm text-muted underline underline-offset-4">
+          <Icon name="trash" size={15} /> 이 강연 삭제
+        </button>
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-paper via-paper to-transparent pb-7 pt-8">
@@ -284,7 +312,9 @@ export default function LectureDetail() {
           <Sticker size={56} rotate={-8}>
             {file?.state === "failed" ? "⚠️" : "⏳"}
           </Sticker>
-          <p className="mt-4 text-[22px] font-extrabold tracking-[-0.04em]">{file?.state === "failed" ? "교안 처리에 실패했어요" : "교안을 아직 처리하고 있어요"}</p>
+          <p className="mt-4 text-[22px] font-extrabold tracking-[-0.04em]">
+            {file?.state === "failed" ? "교안 처리에 실패했어요" : file && budgetHeld(file) ? "교안 처리가 보류됐어요" : "교안을 아직 처리하고 있어요"}
+          </p>
           <p className="mt-2 text-sm leading-relaxed text-muted">지금 시작하면 AI가 교안을 근거로 쓰지 못해 더 많은 질문이 강연자에게 넘어올 수 있어요.</p>
         </div>
         <div className="mt-6 flex gap-2">
@@ -327,11 +357,32 @@ export default function LectureDetail() {
       </Modal>
 
       <SttConsentModal open={sttOpen} onClose={() => setSttOpen(false)} onConfirm={startLecture} noFile={!file} />
+
+      <Modal open={del} onClose={() => setDel(false)} title="강연을 삭제할까요?">
+        <p className="rounded-2xl bg-white p-3.5 font-bold">{lecture.title}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted">아직 시작하지 않은 강연이에요. 강연 정보 · 입장 QR · 교안 · 전문용어 사전이 지워지고 되돌릴 수 없어요.</p>
+        <div className="mt-6 flex gap-2">
+          <Button variant="soft" className="flex-1" onClick={() => setDel(false)}>
+            취소
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            onClick={() => {
+              setDemo((s) => ({ deletedLectures: [...s.deletedLectures, lecture.id] }));
+              router.push("/lectures");
+            }}
+          >
+            삭제하기
+          </Button>
+        </div>
+      </Modal>
     </Screen>
   );
 }
 
 function fileLabel(state: FileState, pages: number, chunks: number) {
+  if (state === "pending") return "처리 대기 중이에요";
   if (state === "processing") return "AI가 교안을 읽는 중이에요";
   if (state === "failed") return "처리 실패";
   return `${pages}쪽 · 검색 조각 ${chunks}개`;

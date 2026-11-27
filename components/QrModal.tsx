@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { FakeQR } from "./FakeQR";
 import { Logo, Sticker } from "./Brand";
 import { Icon } from "./Icon";
+import { JoinQr, useJoinUrl } from "./JoinQr";
 import { Button, Modal } from "./ui";
 import { newCode } from "@/lib/mock";
 import { setDemo } from "@/lib/store";
@@ -40,8 +40,16 @@ export function QrReissue({ lectureId, onDone }: { lectureId: string; onDone: (c
 }
 
 // 강연장 화면에 띄우는 전체 화면 QR
-export function QrModal({ open, onClose, code, title }: { open: boolean; onClose: () => void; code: string; title: string }) {
+// url: 서버가 준 입장 링크(join_url). 없으면(데모) 지금 주소로 만든다
+export function QrModal({ open, onClose, code, title, url }: { open: boolean; onClose: () => void; code: string; title: string; url?: string }) {
   if (!open) return null;
+  return <QrScreen onClose={onClose} code={code} title={title} url={url} />;
+}
+
+function QrScreen({ onClose, code, title, url }: { onClose: () => void; code: string; title: string; url?: string }) {
+  const link = useJoinUrl(code, url);
+  // 코드를 직접 입력할 주소 (예: easyqna.live/join)
+  const joinPage = link ? link.replace(/^https?:\/\//, "").replace(/\?.*$/, "") : "";
   return (
     <div className="fixed inset-0 z-50 flex animate-pop flex-col items-center justify-center bg-ink p-6 text-white" onClick={onClose}>
       <button className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/12" aria-label="닫기">
@@ -52,7 +60,7 @@ export function QrModal({ open, onClose, code, title }: { open: boolean; onClose
       <p className="mt-3 text-white/55">QR을 찍고 질문을 남겨주세요</p>
       <div className="relative mt-10">
         <div className="rounded-[36px] bg-white p-6">
-          <FakeQR code={code} size={280} />
+          <JoinQr code={code} url={url} size={280} />
         </div>
         <Sticker size={64} rotate={-12} float className="absolute -bottom-6 -left-10">
           🙋
@@ -62,7 +70,7 @@ export function QrModal({ open, onClose, code, title }: { open: boolean; onClose
         </Sticker>
       </div>
       <p className="mt-10 text-6xl font-extrabold tracking-[0.25em] md:text-8xl">{code}</p>
-      <p className="mt-3 text-white/55">easyq.app 에서 코드 입력</p>
+      {joinPage && <p className="mt-3 text-white/55">{joinPage} 에서 코드 입력</p>}
     </div>
   );
 }

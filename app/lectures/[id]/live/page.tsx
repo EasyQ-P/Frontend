@@ -2,14 +2,16 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { FakeQR } from "@/components/FakeQR";
+import { JoinQr } from "@/components/JoinQr";
 import { Bubble, Logo, Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { QrModal, QrReissue } from "@/components/QrModal";
 import { TeachingFiles } from "@/components/lecture";
+import { RemoteLectureLive } from "@/components/remote/LectureLive";
 import { SourceChips } from "@/components/SourceChips";
 import { Button, Empty, Modal, RoundButton, inputCls, useToast } from "@/components/ui";
 import { type AiQuestion, demoClock, findLecture, incomingQuestions, initialTranscript, liveAiQuestions, livePublicQuestions, type PublicQuestion, statusOf, toneCycle, transcriptScript } from "@/lib/mock";
+import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo } from "@/lib/store";
 
 // 음성 인식 상태. 불안정(unstable)한 동안의 발화는 인식 누락 구간으로 남긴다
@@ -30,7 +32,13 @@ const retractReasons: { value: RetractReason; label: string; desc: string }[] = 
   { value: "self", label: "제가 직접 답변할게요", desc: "AI 답변 대신 강연 중에 직접 설명할게요." },
 ];
 
-export default function LiveDashboard() {
+// 데모는 목업 대시보드, 실제 API는 강연 상태 · 참여 인원 · QR · 종료만 (질문 API 연결 전)
+export default function LiveDashboardPage() {
+  const { id } = useParams<{ id: string }>();
+  return DEMO ? <LiveDashboard /> : <RemoteLectureLive id={id} />;
+}
+
+function LiveDashboard() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
@@ -370,17 +378,17 @@ export default function LiveDashboard() {
                 </div>
               </div>
 
-              {/* 교안: 진행 중에는 추가 업로드만 (삭제는 시작 전 · 종료 후) */}
+              {/* 교안: 진행 중에는 추가 업로드 + 조각이 없는 실패 교안 삭제 (그 밖의 삭제는 시작 전 · 종료 후) */}
               <div className="mt-4">
                 <p className="mb-2 flex items-center gap-2 font-bold">
                   교안 <span className="text-xs font-normal text-muted">진행 중에도 추가로 올릴 수 있어요</span>
                 </p>
-                <TeachingFiles initial={lecture.file ? [{ id: "f0", name: lecture.file.name, pages: lecture.file.pages, state: lecture.file.state, failReason: lecture.file.failReason }] : []} canUpload canDelete={false} />
+                <TeachingFiles initial={lecture.file ? [{ id: "f0", name: lecture.file.name, pages: lecture.file.pages, state: lecture.file.state, failReason: lecture.file.failReason, chunks: lecture.file.chunks, errorCode: lecture.file.errorCode }] : []} canUpload canDelete={false} />
               </div>
 
               {/* QR */}
               <div className="mt-4 flex items-center gap-4 rounded-[28px] bg-white p-4">
-                <FakeQR code={code} size={96} />
+                <JoinQr code={code} size={96} />
                 <div className="flex-1">
                   <p className="text-xs text-muted">입장 코드</p>
                   <p className="text-3xl font-extrabold tracking-[0.2em]">{code}</p>
