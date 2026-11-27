@@ -11,7 +11,7 @@ export type TodayLecture = {
   date: string;
   emoji: string;
   /** 교안 상태. null이면 아직 안 올림 */
-  file: { state: "none" | "processing" | "failed" | "done" } | null;
+  file: { state: "none" | "pending" | "processing" | "failed" | "done" } | null;
 };
 
 export type TodayClause = {

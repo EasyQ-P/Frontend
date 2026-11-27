@@ -370,12 +370,12 @@ export default function LiveDashboard() {
                 </div>
               </div>
 
-              {/* 교안: 진행 중에는 추가 업로드만 (삭제는 시작 전 · 종료 후) */}
+              {/* 교안: 진행 중에는 추가 업로드 + 조각이 없는 실패 교안 삭제 (그 밖의 삭제는 시작 전 · 종료 후) */}
               <div className="mt-4">
                 <p className="mb-2 flex items-center gap-2 font-bold">
                   교안 <span className="text-xs font-normal text-muted">진행 중에도 추가로 올릴 수 있어요</span>
                 </p>
-                <TeachingFiles initial={lecture.file ? [{ id: "f0", name: lecture.file.name, pages: lecture.file.pages, state: lecture.file.state, failReason: lecture.file.failReason }] : []} canUpload canDelete={false} />
+                <TeachingFiles initial={lecture.file ? [{ id: "f0", name: lecture.file.name, pages: lecture.file.pages, state: lecture.file.state, failReason: lecture.file.failReason, chunks: lecture.file.chunks, errorCode: lecture.file.errorCode }] : []} canUpload canDelete={false} />
               </div>
 
               {/* QR */}

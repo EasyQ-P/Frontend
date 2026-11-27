@@ -26,7 +26,8 @@ export const me = {
 // ── 강연자: 내 강연 ───────────────────────────────
 
 export type LectureStatus = "ready" | "live" | "ended";
-export type FileState = "none" | "processing" | "failed" | "done";
+// pending: 처리 대기. error_code가 BUDGET_EXCEEDED면 예산 한도로 보류된 상태다
+export type FileState = "none" | "pending" | "processing" | "failed" | "done";
 
 export type Lecture = {
   id: string;
@@ -41,7 +42,7 @@ export type Lecture = {
   tone: Tone;
   emoji: string;
   // retryable: 실패 원인이 일시적이라 같은 파일로 다시 시도할 수 있음. 아니면 파일 교체만
-  file: { name: string; pages: number; chunks: number; state: FileState; failReason?: string; retryable?: boolean } | null;
+  file: { name: string; pages: number; chunks: number; state: FileState; failReason?: string; retryable?: boolean; errorCode?: string } | null;
   audience: number;
   glossary: string[];
   endReason?: EndReason;
