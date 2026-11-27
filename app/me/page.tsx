@@ -1,11 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, Sticker } from "@/components/Brand";
 import { Icon, type IconName } from "@/components/Icon";
 import { Button, Field, Modal, Screen, inputCls, useToast } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
+import { changeAccountConsent } from "@/lib/api/accounts";
+import { getMe } from "@/lib/api/auth";
 import { MOCK_PASSWORD, logout, pwValid } from "@/lib/auth";
+import { DEMO } from "@/lib/demo";
 import { LEARN_CONSENT_TEXT, archive, inquiries, lectures, me, notices, statusOf } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
@@ -26,6 +30,39 @@ export default function Me() {
   const [openNotice, setOpenNotice] = useState<string | null>(null);
   const [inq, setInq] = useState({ title: "", body: "" });
   const [reauthPw, setReauthPw] = useState("");
+  const [consentBusy, setConsentBusy] = useState(false);
+
+  // 실제 API: 계정 동의 상태를 서버에서 불러온다 (API-09)
+  useEffect(() => {
+    if (DEMO) return;
+    let stopped = false;
+    getMe().then(
+      (u) => !stopped && setDemo((st) => ({ consent: { ...st.consent, learn: !!u.consents.TRAINING?.granted } })),
+      (e) => {
+        if (!stopped && e instanceof ApiError && e.code === "AUTH_REQUIRED") router.replace(`/login?next=${encodeURIComponent("/me")}`);
+      },
+    );
+    return () => {
+      stopped = true;
+    };
+  }, [router]);
+
+  // 학습 활용(TRAINING) 동의 바꾸기. 실제 API는 API-11로 저장한다
+  async function toggleLearn() {
+    const next = !consent.learn;
+    if (!DEMO) {
+      setConsentBusy(true);
+      try {
+        await changeAccountConsent("TRAINING", next);
+      } catch {
+        setConsentBusy(false);
+        return toast.show("동의 상태를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.", "coral");
+      }
+      setConsentBusy(false);
+    }
+    setDemo({ consent: { ...consent, learn: next } });
+    toast.show(next ? "익명 활용에 동의했어요" : "익명 활용 동의를 철회했어요", "mint");
+  }
   const [reauthError, setReauthError] = useState("");
   const hasLive = lectures.some((l) => statusOf(l, endedLectures, startedLectures) === "live");
 
@@ -125,10 +162,8 @@ export default function Me() {
             </span>
           </div>
           <button
-            onClick={() => {
-              setDemo({ consent: { ...consent, learn: !consent.learn } });
-              toast.show(consent.learn ? "익명 활용 동의를 철회했어요" : "익명 활용에 동의했어요", "mint");
-            }}
+            onClick={toggleLearn}
+            disabled={consentBusy}
             role="switch"
             aria-checked={consent.learn}
             className="flex w-full gap-3 rounded-[20px] bg-white p-4 text-left"
