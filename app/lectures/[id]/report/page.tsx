@@ -34,7 +34,9 @@ export default function Report() {
     return (
       <Screen>
         <TopBar back="/lectures" />
-        <Empty title="강연을 찾을 수 없어요" />
+        <Empty emoji="🔍" title="강연을 찾을 수 없어요" desc="지워졌거나 없는 강연이에요.">
+          <Button href="/lectures">내 강연으로</Button>
+        </Empty>
       </Screen>
     );
 

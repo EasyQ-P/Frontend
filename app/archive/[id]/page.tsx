@@ -34,7 +34,9 @@ export default function ArchiveDetail() {
     return (
       <Screen>
         <TopBar back="/archive" />
-        <Empty title="기록을 찾을 수 없어요" />
+        <Empty emoji="🔍" title="기록을 찾을 수 없어요" desc="지워졌거나 없는 기록이에요.">
+          <Button href="/archive">보관함으로</Button>
+        </Empty>
       </Screen>
     );
 
