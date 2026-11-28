@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { AdminTitle, Dot, Panel, Stat } from "@/components/admin";
 import { Icon } from "@/components/Icon";
+import { RemoteAdminDashboard } from "@/components/remote/AdminDashboard";
 import { Button, Progress, Tabs, inputCls, useToast } from "@/components/ui";
+import { DEMO } from "@/lib/demo";
 import { costBudget, dailyMetrics, latencyTarget, opsMetrics, sessionMetrics, type Period } from "@/lib/admin";
 
 const won = (n: number) => `${n.toLocaleString()}원`;
@@ -11,7 +13,12 @@ const won = (n: number) => `${n.toLocaleString()}원`;
 const sec = (n: number | null) => (n === null ? "–" : `${n}s`);
 const pair = (a: number | null, b: number | null) => `${sec(a)} · ${sec(b)}`;
 
-export default function AdminDashboard() {
+// 데모는 목업 지표, 실제 API는 운영 지표(API-64) · 예산 설정(API-65)
+export default function AdminDashboardPage() {
+  return DEMO ? <AdminDashboard /> : <RemoteAdminDashboard />;
+}
+
+function AdminDashboard() {
   const [period, setPeriod] = useState<Period>("week");
   const m = opsMetrics[period];
   const toast = useToast();

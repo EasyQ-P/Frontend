@@ -3,12 +3,19 @@
 import { useState } from "react";
 import { AdminTitle, Dot, Panel } from "@/components/admin";
 import { Icon } from "@/components/Icon";
+import { RemoteAdminData } from "@/components/remote/AdminData";
 import { Button, Pill, Progress, Tabs, useToast } from "@/components/ui";
 import { datasets, forwardKinds, judgeThresholds, labelCandidates, labelText, type LabelCandidate } from "@/lib/admin";
+import { DEMO } from "@/lib/demo";
 import { setDemo, useDemo, type LabelDecision } from "@/lib/store";
 const originTone = { 철회: "bg-coral/20", 이관: "bg-ocean/15", "피드백 👎": "bg-honey/40" };
 
-export default function AdminData() {
+// 데모는 목업 데이터셋 · 후보, 실제 API는 데이터셋(API-56) · 라벨 검수(API-53/54) · 병합(API-55)
+export default function AdminDataPage() {
+  return DEMO ? <AdminData /> : <RemoteAdminData />;
+}
+
+function AdminData() {
   const [tab, setTab] = useState<"dataset" | "review">("dataset");
   const { labelDecisions } = useDemo();
   const pending = labelCandidates.filter((c) => !labelDecisions[c.id]).length;

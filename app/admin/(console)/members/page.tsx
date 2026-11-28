@@ -1,17 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { AdminTitle, Dot, Panel } from "@/components/admin";
 import { Avatar } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { Button, Empty, Field, Modal, Pill, Tabs, inputCls, useToast } from "@/components/ui";
-import { members as initialMembers, suspendReasons, type Member, type MemberStatus } from "@/lib/admin";
+import { listUsers, setUserStatus } from "@/lib/api/admin";
+import { members as initialMembers, suspendReasons, userToMember, type Member, type MemberStatus } from "@/lib/admin";
+import { adminErrorMessage, adminLoggedOut } from "@/lib/adminApi";
+import { DEMO } from "@/lib/demo";
+import { setAdmin } from "@/lib/store";
 
-const statusLabel: Record<MemberStatus, string> = { active: "정상", suspended: "정지", unverified: "인증 대기" };
-const statusDot: Record<MemberStatus, string> = { active: "bg-mint", suspended: "bg-coral", unverified: "bg-honey" };
+const statusLabel: Record<MemberStatus, string> = { active: "정상", suspended: "정지", unverified: "인증 대기", deleting: "탈퇴 처리 중" };
+const statusDot: Record<MemberStatus, string> = { active: "bg-mint", suspended: "bg-coral", unverified: "bg-honey", deleting: "bg-ink/30" };
 
+// 데모는 목업 회원, 실제 API는 회원 목록(API-45) · 정지 · 복구(API-46)
 export default function AdminMembers() {
-  const [list, setList] = useState(initialMembers);
+  const router = useRouter();
+  const [list, setList] = useState<Member[]>(DEMO ? initialMembers : []);
+  const [loading, setLoading] = useState(!DEMO);
+  const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | MemberStatus>("all");
   const [target, setTarget] = useState<Member | null>(null);
@@ -21,6 +30,28 @@ export default function AdminMembers() {
   const [restoring, setRestoring] = useState<Member | null>(null);
   const [restoreReason, setRestoreReason] = useState("");
   const toast = useToast();
+  const showToast = toast.show;
+
+  useEffect(() => {
+    if (DEMO) return;
+    let stopped = false;
+    listUsers().then(
+      (r) => {
+        if (stopped) return;
+        setList(r.items.map(userToMember));
+        setLoading(false);
+      },
+      (e) => {
+        if (stopped) return;
+        if (adminLoggedOut(e)) return (setAdmin(null), router.replace("/admin/login"));
+        setLoading(false);
+        showToast(adminErrorMessage(e), "coral");
+      },
+    );
+    return () => {
+      stopped = true;
+    };
+  }, [router, showToast]);
 
   const query = q.trim().toLowerCase();
   const shown = list.filter((m) => (tab === "all" || m.status === tab) && (!query || m.name.toLowerCase().includes(query) || m.email.includes(query)));
@@ -30,17 +61,38 @@ export default function AdminMembers() {
     setList((l) => l.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }
 
-  function suspend() {
+  // 정지 (API-46). 진행 중인 강연은 강제 종료되고 로그인이 끊긴다
+  async function suspend() {
     if (!target) return;
-    update(target.id, { status: "suspended", suspensionReason: detail.trim() ? `${reason} — ${detail.trim()}` : reason });
+    const why = detail.trim() ? `${reason} — ${detail.trim()}` : reason;
+    if (!DEMO) {
+      setBusy(true);
+      try {
+        update(target.id, userToMember(await setUserStatus(target.id, "SUSPENDED", why)));
+      } catch (e) {
+        setBusy(false);
+        return toast.show(adminErrorMessage(e), "coral");
+      }
+      setBusy(false);
+    } else update(target.id, { status: "suspended", suspensionReason: why });
     toast.show(`${target.name} 님을 정지했어요. 다음 로그인부터 막혀요.`, "coral");
     setTarget(null);
     setDetail("");
   }
 
-  function restore() {
+  // 복구 (API-46). 남은 로그인을 모두 끊은 뒤 정상으로 바꿔서 다시 로그인해야 한다
+  async function restore() {
     if (!restoring || !restoreReason.trim()) return;
-    update(restoring.id, { status: "active", suspensionReason: undefined });
+    if (!DEMO) {
+      setBusy(true);
+      try {
+        update(restoring.id, userToMember(await setUserStatus(restoring.id, "ACTIVE", restoreReason.trim())));
+      } catch (e) {
+        setBusy(false);
+        return toast.show(adminErrorMessage(e), "coral");
+      }
+      setBusy(false);
+    } else update(restoring.id, { status: "active", suspensionReason: undefined });
     toast.show(`${restoring.name} 님을 복구했어요. 바로 로그인할 수 있어요.`, "mint");
     setRestoring(null);
     setRestoreReason("");
@@ -69,7 +121,9 @@ export default function AdminMembers() {
       </div>
 
       <Panel className="mt-4">
-        {shown.length === 0 ? (
+        {loading ? (
+          <p className="py-10 text-center text-sm text-muted">불러오는 중…</p>
+        ) : shown.length === 0 ? (
           <Empty title="찾는 회원이 없어요" emoji="🔍" />
         ) : (
           <div className="-mx-5 overflow-x-auto px-5">
@@ -91,7 +145,10 @@ export default function AdminMembers() {
                       <div className="flex items-center gap-3">
                         <Avatar name={m.name} size={36} className="!ring-0" />
                         <div className="min-w-0">
-                          <p className="font-semibold">{m.name}</p>
+                          <p className="font-semibold">
+                            {m.name}
+                            {m.admin && <span className="ml-1.5 rounded-full bg-ink px-1.5 py-0.5 text-[10px] font-bold text-white">ADMIN</span>}
+                          </p>
                           <p className="truncate text-xs text-muted">{m.email}</p>
                         </div>
                       </div>
@@ -108,7 +165,7 @@ export default function AdminMembers() {
                       {m.status === "unverified" && <p className="mt-1 text-xs text-muted">이메일 인증 코드를 아직 입력하지 않았어요</p>}
                     </td>
                     <td className="py-3 text-right">
-                      {m.status === "suspended" ? (
+                      {m.status === "deleting" || m.status === "unverified" ? null : m.status === "suspended" ? (
                         <Button size="sm" variant="soft" onClick={() => setRestoring(m)}>
                           복구
                         </Button>
@@ -151,7 +208,7 @@ export default function AdminMembers() {
           <Button variant="soft" className="flex-1" onClick={() => setTarget(null)}>
             취소
           </Button>
-          <Button variant="danger" className="flex-1" onClick={suspend}>
+          <Button variant="danger" className="flex-1" disabled={busy} onClick={suspend}>
             정지하기
           </Button>
         </div>
@@ -168,7 +225,7 @@ export default function AdminMembers() {
           <Button variant="soft" className="flex-1" onClick={() => setRestoring(null)}>
             취소
           </Button>
-          <Button className="flex-1" disabled={!restoreReason.trim()} onClick={restore}>
+          <Button className="flex-1" disabled={!restoreReason.trim() || busy} onClick={restore}>
             복구하기
           </Button>
         </div>

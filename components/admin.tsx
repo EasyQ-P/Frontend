@@ -6,8 +6,10 @@ import { useEffect } from "react";
 import { Logo } from "./Brand";
 import { Icon, type IconName } from "./Icon";
 import { LLM_ONLY } from "@/lib/admin";
+import { getDeployments } from "@/lib/api/admin";
+import { DEMO } from "@/lib/demo";
 import { logout } from "@/lib/auth";
-import { restoreAdmin, setAdmin, useDemo } from "@/lib/store";
+import { restoreAdmin, setAdmin, setDemo, useDemo } from "@/lib/store";
 
 // ── 관리자 화면 틀 ────────────────────────────────
 
@@ -29,6 +31,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!admin && !restoreAdmin()) router.replace("/admin/login");
   }, [admin, router]);
+
+  // 실제 API: 사이드바의 현재 서빙 모델 (API-63). 모델 화면에서 바꾸면 거기서 다시 넣는다
+  useEffect(() => {
+    if (DEMO || !admin) return;
+    getDeployments().then(
+      (d) => d.active && setDemo({ servingVersion: d.active.mode === "LLM_ONLY" ? LLM_ONLY : (d.active.model_version ?? LLM_ONLY) }),
+      () => {},
+    );
+  }, [admin]);
 
   async function signOut() {
     await logout();
