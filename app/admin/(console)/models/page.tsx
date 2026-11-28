@@ -1,5 +1,6 @@
 "use client";
 
+import { RemoteAdminModels } from "@/components/remote/AdminModels";
 import { useEffect, useRef, useState } from "react";
 import { AdminTitle, Dot, Panel } from "@/components/admin";
 import { Sticker } from "@/components/Brand";
@@ -20,7 +21,12 @@ function gate(v: ModelVersion, serving: ModelVersion) {
 
 const servingName = (id: string) => (id === LLM_ONLY ? "LLM_ONLY (Sonnet 단독 판정)" : id);
 
-export default function AdminModels() {
+// 데모는 목업 모델, 실제 API는 서빙 · 학습 · 모델 버전 (API-57 ~ 63)
+export default function AdminModelsPage() {
+  return DEMO ? <AdminModels /> : <RemoteAdminModels />;
+}
+
+function AdminModels() {
   const { servingVersion, retrained, mergedLabels, servedVersions } = useDemo();
   const versions = retrained ? [retrainedVersion, ...modelVersions] : modelVersions;
   const serving = versions.find((v) => v.id === servingVersion) ?? null;

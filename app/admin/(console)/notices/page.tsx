@@ -1,16 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { AdminTitle, Panel } from "@/components/admin";
 import { Icon } from "@/components/Icon";
 import { Button, Field, Modal, Pill, Tabs, inputCls, useToast } from "@/components/ui";
+import { createNotice, deleteNotice, replyInquiry, updateNotice } from "@/lib/api/admin";
+import { listInquiries, listNotices, type Inquiry, type Notice } from "@/lib/api/me";
 import { adminInquiries } from "@/lib/admin";
+import { adminErrorMessage, adminLoggedOut } from "@/lib/adminApi";
+import { DEMO } from "@/lib/demo";
+import { formatSchedule } from "@/lib/join";
 import { notices as initialNotices } from "@/lib/mock";
+import { setAdmin } from "@/lib/store";
 
+type NoticeRow = { id: string; title: string; body: string; date: string; version?: number };
+type InquiryRow = { id: string; title: string; from: string; date: string; body: string; answer?: string };
+
+const dateOf = (iso: string) => formatSchedule(iso).date.replace(/ \(.\)$/, "");
+const noticeRow = (n: Notice): NoticeRow => ({ id: n.notice_id, title: n.title, body: n.content, date: dateOf(n.created_at), version: n.version });
+const inquiryRow = (i: Inquiry): InquiryRow => ({ id: i.inquiry_id, title: i.title, from: i.author_display_name ?? "", date: dateOf(i.created_at), body: i.content, answer: i.reply ?? undefined });
+
+// 데모는 목업, 실제 API는 공지(API-42 · 49~51) · 문의(API-44 · 52)
 export default function AdminNotices() {
+  const router = useRouter();
   const [tab, setTab] = useState<"notice" | "inquiry">("notice");
-  const [notices, setNotices] = useState(initialNotices);
-  const [inquiries, setInquiries] = useState(adminInquiries);
+  const [notices, setNotices] = useState<NoticeRow[]>(DEMO ? initialNotices : []);
+  const [inquiries, setInquiries] = useState<InquiryRow[]>(DEMO ? adminInquiries : []);
+  const [busy, setBusy] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   // 수정 중인 공지 id. null이면 새 공지를 쓴다
@@ -19,11 +36,55 @@ export default function AdminNotices() {
   const [open, setOpen] = useState<string | null>(inquiries.find((i) => !i.answer)?.id ?? null);
   const [reply, setReply] = useState("");
   const toast = useToast();
+  const showToast = toast.show;
+
+  useEffect(() => {
+    if (DEMO) return;
+    let stopped = false;
+    Promise.all([listNotices(), listInquiries()]).then(
+      ([n, i]) => {
+        if (stopped) return;
+        setNotices(n.items.map(noticeRow));
+        const rows = i.items.map(inquiryRow);
+        setInquiries(rows);
+        setOpen(rows.find((x) => !x.answer)?.id ?? null);
+      },
+      (e) => {
+        if (stopped) return;
+        if (adminLoggedOut(e)) return (setAdmin(null), router.replace("/admin/login"));
+        showToast(adminErrorMessage(e), "coral");
+      },
+    );
+    return () => {
+      stopped = true;
+    };
+  }, [router, showToast]);
+
   const waiting = inquiries.filter((i) => !i.answer).length;
 
-  function post(e: React.FormEvent) {
+  async function post(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
+    if (!DEMO) {
+      setBusy(true);
+      try {
+        const cur = notices.find((x) => x.id === editing);
+        if (editing && cur) {
+          const n = noticeRow(await updateNotice(editing, cur.version ?? 1, { title: title.trim(), content: body.trim() }));
+          setNotices((l) => l.map((x) => (x.id === editing ? n : x)));
+          toast.show("공지를 수정했어요", "mint");
+        } else {
+          const n = noticeRow(await createNotice(title.trim(), body.trim()));
+          setNotices((l) => [n, ...l]);
+          toast.show("공지를 올렸어요. 회원 화면에 바로 보여요.", "mint");
+        }
+      } catch (err) {
+        setBusy(false);
+        return toast.show(adminErrorMessage(err), "coral");
+      }
+      setBusy(false);
+      return cancelEdit();
+    }
     if (editing) {
       setNotices((n) => n.map((x) => (x.id === editing ? { ...x, title: title.trim(), body: body.trim() } : x)));
       toast.show("공지를 수정했어요", "mint");
@@ -48,16 +109,33 @@ export default function AdminNotices() {
     setBody("");
   }
 
-  function remove() {
+  async function remove() {
+    if (!DEMO && removing) {
+      try {
+        await deleteNotice(removing);
+      } catch (e) {
+        return toast.show(adminErrorMessage(e), "coral");
+      }
+    }
     setNotices((n) => n.filter((x) => x.id !== removing));
     if (editing === removing) cancelEdit();
     setRemoving(null);
     toast.show("공지를 삭제했어요");
   }
 
-  function answer(id: string) {
+  async function answer(id: string) {
     if (!reply.trim()) return;
-    setInquiries((l) => l.map((i) => (i.id === id ? { ...i, answer: reply.trim() } : i)));
+    if (!DEMO) {
+      setBusy(true);
+      try {
+        const r = inquiryRow(await replyInquiry(id, reply.trim()));
+        setInquiries((l) => l.map((i) => (i.id === id ? r : i)));
+      } catch (e) {
+        setBusy(false);
+        return toast.show(adminErrorMessage(e), "coral");
+      }
+      setBusy(false);
+    } else setInquiries((l) => l.map((i) => (i.id === id ? { ...i, answer: reply.trim() } : i)));
     setReply("");
     setOpen(null);
     toast.show("답변을 보냈어요. 회원에게 알림이 가요.", "mint");
@@ -93,7 +171,7 @@ export default function AdminNotices() {
                     취소
                   </Button>
                 )}
-                <Button type="submit" className="flex-1" icon={editing ? "check" : "megaphone"} disabled={!title.trim() || !body.trim()}>
+                <Button type="submit" className="flex-1" icon={editing ? "check" : "megaphone"} disabled={!title.trim() || !body.trim() || busy}>
                   {editing ? "수정 저장" : "공지 올리기"}
                 </Button>
               </div>
@@ -101,13 +179,14 @@ export default function AdminNotices() {
           </Panel>
           <Panel title="올린 공지">
             <div className="space-y-2">
+              {notices.length === 0 && <p className="py-6 text-center text-sm text-muted">아직 올린 공지가 없어요</p>}
               {notices.map((n) => (
                 <div key={n.id} className={`animate-rise rounded-[18px] bg-paper p-4 ${editing === n.id ? "ring-2 ring-ink" : ""}`}>
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-bold">{n.title}</p>
                     <span className="shrink-0 text-xs text-muted">{n.date}</span>
                   </div>
-                  <p className="mt-1 text-sm leading-relaxed text-ink/70">{n.body}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink/70">{n.body}</p>
                   <div className="mt-3 flex justify-end gap-1.5">
                     <Button size="sm" variant="ghost" icon="pen" onClick={() => startEdit(n.id)}>
                       수정
@@ -123,6 +202,7 @@ export default function AdminNotices() {
         </div>
       ) : (
         <div className="mt-4 animate-rise space-y-2.5">
+          {inquiries.length === 0 && <p className="rounded-[24px] bg-white py-10 text-center text-sm text-muted">들어온 문의가 없어요</p>}
           {inquiries.map((i) => (
             <div key={i.id} className="rounded-[24px] bg-white p-5">
               <button className="flex w-full items-start gap-3 text-left" onClick={() => setOpen(open === i.id ? null : i.id)}>
@@ -149,7 +229,7 @@ export default function AdminNotices() {
                     <div className="mt-3 space-y-2">
                       <textarea className={`${inputCls} h-28 resize-none`} value={reply} onChange={(e) => setReply(e.target.value)} maxLength={2000} placeholder="답변을 적어 주세요" />
                       <div className="flex justify-end">
-                        <Button size="sm" icon="send" disabled={!reply.trim()} onClick={() => answer(i.id)}>
+                        <Button size="sm" icon="send" disabled={!reply.trim() || busy} onClick={() => answer(i.id)}>
                           답변 보내기
                         </Button>
                       </div>

@@ -1,7 +1,8 @@
 "use client";
 
 // 강연 준비 화면 (실제 API). 데모 모드는 app/lectures/[id]/page.tsx의 목업 화면을 쓴다.
-// API-15 강연 · API-22 교안 상태 · API-21 업로드 · API-23 재시도 · API-25 용어 사전 · API-17 QR 재발급 · API-20 STT 동의 · API-16 시작
+// API-15 강연 · API-22 교안 상태 · API-21 업로드 · API-23 재시도 · API-24 교안 삭제 · API-25 용어 사전 · API-17 QR 재발급 ·
+// API-20 STT 동의 · API-16 시작 · API-40 강연 삭제
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bubble, Sticker } from "@/components/Brand";
@@ -23,6 +24,7 @@ import {
   type Session,
   type SessionDocument,
 } from "@/lib/api/lectures";
+import { deleteDocument, requestDeletion } from "@/lib/api/records";
 import { documentFailReason, documentLine, isBudgetHeld, isWorking, lectureErrorMessage, sessionToLecture } from "@/lib/lectures";
 
 // 전문용어 사전: 최대 100개, 용어당 1~40자 (API-25)
@@ -49,6 +51,9 @@ export function RemoteLecturePrep({ id }: { id: string }) {
   const [warn, setWarn] = useState(false);
   const [sttOpen, setSttOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [removingDoc, setRemovingDoc] = useState<SessionDocument | null>(null);
+  const [delOpen, setDelOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 처음 불러오기 (API-15 + API-22)
@@ -140,6 +145,35 @@ export function RemoteLecturePrep({ id }: { id: string }) {
       await retryDocument(id, d.document_id, crypto.randomUUID());
       await refreshDocs();
     } catch (e) {
+      toast.show(lectureErrorMessage(e), "coral");
+    }
+  }
+
+  // 교안 삭제 (API-24). 처리 중인 교안도 지울 수 있다(처리를 멈춘다)
+  async function removeDoc() {
+    if (!removingDoc) return;
+    setBusy(true);
+    try {
+      await deleteDocument(id, removingDoc.document_id);
+      setRemovingDoc(null);
+      await refreshDocs();
+      toast.show("교안을 삭제했어요");
+    } catch (e) {
+      toast.show(lectureErrorMessage(e), "coral");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 시작 전 강연 삭제 (API-40 SESSION). 입장해 기다리던 청중은 입장이 취소된다
+  async function removeLecture() {
+    setBusy(true);
+    try {
+      await requestDeletion("SESSION", id);
+      router.push("/lectures");
+    } catch (e) {
+      setBusy(false);
+      setDelOpen(false);
       toast.show(lectureErrorMessage(e), "coral");
     }
   }
@@ -240,6 +274,9 @@ export function RemoteLecturePrep({ id }: { id: string }) {
                     <p className="text-xs text-muted">{documentLine(d)}</p>
                   </div>
                   <DocPill d={d} />
+                  <button onClick={() => setRemovingDoc(d)} className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-ink/5" aria-label={`${d.file_name} 삭제`}>
+                    <Icon name="trash" size={16} />
+                  </button>
                 </div>
                 {isWorking(d) && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink/8"><div className="h-full w-1/3 animate-pulse rounded-full bg-ink" /></div>}
                 {isBudgetHeld(d) && (
@@ -350,6 +387,10 @@ export function RemoteLecturePrep({ id }: { id: string }) {
             </div>
           </div>
         </Step>
+
+        <button onClick={() => setDelOpen(true)} className="mt-10 flex w-full items-center justify-center gap-1.5 text-sm text-muted underline underline-offset-4">
+          <Icon name="trash" size={15} /> 이 강연 삭제
+        </button>
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-paper via-paper to-transparent pb-7 pt-8">
@@ -403,6 +444,32 @@ export function RemoteLecturePrep({ id }: { id: string }) {
           )}
           <Button className="flex-1" onClick={() => begin(true)}>
             그래도 시작
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={!!removingDoc} onClose={() => setRemovingDoc(null)} title="교안을 삭제할까요?">
+        <p className="rounded-2xl bg-white p-3.5 font-bold">{removingDoc?.file_name}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted">교안 파일과 검색 색인이 지워지고 되돌릴 수 없어요. 교안에서 뽑은 전문용어는 그대로 남아요.</p>
+        <div className="mt-6 flex gap-2">
+          <Button variant="soft" className="flex-1" onClick={() => setRemovingDoc(null)}>
+            취소
+          </Button>
+          <Button variant="danger" className="flex-1" disabled={busy} onClick={removeDoc}>
+            삭제하기
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={delOpen} onClose={() => setDelOpen(false)} title="이 강연을 삭제할까요?">
+        <p className="rounded-2xl bg-white p-3.5 font-bold">{s.title}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted">교안과 입장 QR이 함께 지워지고 되돌릴 수 없어요. 이미 입장해 기다리던 청중은 입장이 취소돼요.</p>
+        <div className="mt-6 flex gap-2">
+          <Button variant="soft" className="flex-1" onClick={() => setDelOpen(false)}>
+            취소
+          </Button>
+          <Button variant="danger" className="flex-1" disabled={busy} onClick={removeLecture}>
+            {busy ? "삭제하는 중…" : "삭제하기"}
           </Button>
         </div>
       </Modal>

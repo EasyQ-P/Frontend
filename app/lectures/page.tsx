@@ -75,8 +75,7 @@ function RemoteLectures() {
           ) : (
             <div className="mt-5">
               {list.map((l, i) => {
-                // 지난 강연 리포트(API-39 등)는 아직 연결 전이라 링크 없이 보여준다
-                const href = l.status === "live" ? `/lectures/${l.id}/live` : l.status === "ready" ? `/lectures/${l.id}` : null;
+                const href = l.status === "live" ? `/lectures/${l.id}/live` : l.status === "ready" ? `/lectures/${l.id}` : `/lectures/${l.id}/report`;
                 const card = (
                   <Bubble tone={l.tone} tail={i % 2 ? "right" : "left"} className={`mb-[22px] ${i ? "-mt-1" : ""}`} style={{ zIndex: list.length - i }}>
                     <div className="flex items-start gap-3">
@@ -93,21 +92,17 @@ function RemoteLectures() {
                     </div>
                     <div className="mt-4 flex items-center justify-between text-sm">
                       <span className="text-ink/65">{l.status === "live" ? `청중 ${l.audience}명 참여 중` : l.status === "ready" ? `입장 코드 ${l.code}` : `청중 ${l.audience}명`}</span>
-                      <span className={`flex items-center gap-1 rounded-full px-3.5 py-2 text-xs font-semibold ${href ? "bg-ink text-white" : "bg-white/60 text-ink/60"}`}>
-                        {l.status === "live" ? "대시보드" : l.status === "ready" ? "준비하기" : "리포트 준비 중"}
-                        {href && <Icon name="right" size={14} />}
+                      <span className={`flex items-center gap-1 rounded-full px-3.5 py-2 text-xs font-semibold bg-ink text-white`}>
+                        {l.status === "live" ? "대시보드" : l.status === "ready" ? "준비하기" : "리포트"}
+                        <Icon name="right" size={14} />
                       </span>
                     </div>
                   </Bubble>
                 );
-                return href ? (
+                return (
                   <Link key={l.id} href={href} className="block animate-rise transition-transform hover:-translate-y-0.5">
                     {card}
                   </Link>
-                ) : (
-                  <div key={l.id} className="animate-rise">
-                    {card}
-                  </div>
                 );
               })}
             </div>

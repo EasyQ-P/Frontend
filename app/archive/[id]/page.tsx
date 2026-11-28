@@ -7,11 +7,19 @@ import { Icon } from "@/components/Icon";
 import { NoteModal } from "@/components/NoteModal";
 import { SummaryNote } from "@/components/SummaryNote";
 import { SourceChips } from "@/components/SourceChips";
+import { RemoteArchiveDetail } from "@/components/remote/ArchiveDetail";
 import { Button, Empty, Modal, RoundButton, Screen, Tabs, TopBar, useToast } from "@/components/ui";
+import { DEMO } from "@/lib/demo";
 import { ORIGINAL_KEEP_DAYS, archive, daysSince } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
-export default function ArchiveDetail() {
+// 데모는 목업 기록, 실제 API는 보관함 강연 ID(session_id)로 기록을 불러온다
+export default function ArchiveDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  return DEMO ? <ArchiveDetail /> : <RemoteArchiveDetail id={id} />;
+}
+
+function ArchiveDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();

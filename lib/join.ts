@@ -76,3 +76,33 @@ export function joinFailure(e: unknown): JoinFailure {
       return { message: "잠시 후 다시 시도해 주세요." };
   }
 }
+
+// ── 입장한 강연 기억하기 ──
+// 입장 확인(API-18)은 강연 ID를 주지 않아서, 입장(API-19) 응답의 session_id와 참가 종류를 코드별로 이 기기에 남긴다.
+// 질문 · 실시간 API가 강연 ID로 부르기 때문이다. 접근 권한은 아니다(권한은 서버의 쿠키로 확인한다)
+const JOINED_KEY = "easyq.joined";
+
+export type JoinedSession = { sessionId: string; guest: boolean };
+
+function readJoined(): Record<string, JoinedSession> {
+  try {
+    return JSON.parse(localStorage.getItem(JOINED_KEY) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function rememberJoinedSession(code: string, sessionId: string, kind: "MEMBER" | "GUEST") {
+  try {
+    // 오래된 코드가 쌓이지 않게 최근 20개만 둔다
+    const entries = Object.entries({ ...readJoined(), [code.toUpperCase()]: { sessionId, guest: kind === "GUEST" } }).slice(-20);
+    localStorage.setItem(JOINED_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // 저장소를 못 쓰면(사생활 보호 모드 등) 다음 방문 때 입장을 한 번 더 확인한다
+  }
+}
+
+export function joinedSession(code: string): JoinedSession | null {
+  const j = readJoined()[code.toUpperCase()];
+  return j && typeof j.sessionId === "string" ? j : null;
+}

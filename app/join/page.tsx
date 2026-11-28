@@ -9,7 +9,7 @@ import { Button, PageTitle, Screen, StatusPill, TopBar, inputCls } from "@/compo
 import { ApiError } from "@/lib/api/client";
 import { getJoinPreview, participate, type JoinPreview } from "@/lib/api/join";
 import { DEMO } from "@/lib/demo";
-import { joinFailure, previewToLecture } from "@/lib/join";
+import { joinFailure, previewToLecture, rememberJoinedSession } from "@/lib/join";
 import { LEARN_CONSENT_TEXT, SESSION_CAPACITY, me, archiveHrefFor, resolveCode, statusOf, type Lecture, type LectureStatus } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
@@ -120,6 +120,7 @@ function Join() {
     try {
       const p = await participate({ code: c, guest: asGuest ? { nickname: nick.trim(), training: agree.learn } : undefined, serviceConsent }, key);
       attempt.current = null;
+      rememberJoinedSession(c, p.session_id, p.kind);
       setDemo({ guestName: p.kind === "GUEST" ? (p.nickname ?? nick.trim()) : null, joinedCode: c });
       router.push(`/live/${c}`);
     } catch (e) {

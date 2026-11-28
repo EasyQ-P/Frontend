@@ -1,23 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { AdminTitle, Panel } from "@/components/admin";
 import { EndReasonPill } from "@/components/lecture";
-import { Button, Empty, Modal, StatusPill, Tabs, useToast } from "@/components/ui";
-import { adminSessions, type AdminSession } from "@/lib/admin";
-import { setDemo } from "@/lib/store";
+import { Button, Empty, Field, Modal, StatusPill, Tabs, inputCls, useToast } from "@/components/ui";
+import { listAdminSessions, patchAdminSession } from "@/lib/api/admin";
+import { adminSessions, sessionToAdmin, type AdminSession } from "@/lib/admin";
+import { adminErrorMessage, adminLoggedOut } from "@/lib/adminApi";
+import { DEMO } from "@/lib/demo";
+import { setAdmin, setDemo } from "@/lib/store";
 
+// 데모는 목업 강연, 실제 API는 강연 목록(API-47) · 평가용 표시 · 강제 종료(API-48)
 export default function AdminSessions() {
-  const [list, setList] = useState(adminSessions);
+  const router = useRouter();
+  const [list, setList] = useState<AdminSession[]>(DEMO ? adminSessions : []);
+  const [loading, setLoading] = useState(!DEMO);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"all" | AdminSession["status"]>("all");
   const [target, setTarget] = useState<AdminSession | null>(null);
   const toast = useToast();
+  const showToast = toast.show;
+
+  useEffect(() => {
+    if (DEMO) return;
+    let stopped = false;
+    listAdminSessions().then(
+      (r) => {
+        if (stopped) return;
+        // 삭제 중인 강연은 관리할 것이 없어 뺀다
+        setList(r.items.filter((x) => x.status !== "DELETING").map(sessionToAdmin));
+        setLoading(false);
+      },
+      (e) => {
+        if (stopped) return;
+        if (adminLoggedOut(e)) return (setAdmin(null), router.replace("/admin/login"));
+        setLoading(false);
+        showToast(adminErrorMessage(e), "coral");
+      },
+    );
+    return () => {
+      stopped = true;
+    };
+  }, [router, showToast]);
 
   const shown = list.filter((s) => tab === "all" || s.status === tab);
   const count = (st: AdminSession["status"]) => list.filter((s) => s.status === st).length;
 
-  function forceEnd() {
+  // 강제 종료 (API-48 status=ENDED, 사유 필수)
+  async function forceEnd() {
     if (!target) return;
+    if (!DEMO) {
+      setBusy(true);
+      try {
+        const r = await patchAdminSession(target.id, target.version ?? 0, { status: "ENDED" }, reason.trim());
+        setList((l) => l.map((s) => (s.id === target.id ? { ...s, status: "ended", endReason: "admin", version: r.version } : s)));
+      } catch (e) {
+        setBusy(false);
+        return toast.show(adminErrorMessage(e), "coral");
+      }
+      setBusy(false);
+      setReason("");
+      toast.show("강연을 강제 종료했어요. 질문이 마감되고 QR이 꺼졌어요.", "coral");
+      return setTarget(null);
+    }
     setList((l) => l.map((s) => (s.id === target.id ? { ...s, status: "ended", endReason: "admin" } : s)));
     // 데모 강연자 · 청중 화면에도 종료가 반영되도록
     setDemo((s) => ({ endedLectures: [...s.endedLectures, target.id], endReasons: { ...s.endReasons, [target.id]: "admin" } }));
@@ -26,8 +73,17 @@ export default function AdminSessions() {
   }
 
   // 평가용 강연 표시는 시작 전에만 켤 수 있고, 켜면 끌 수 없다
-  function markEval(target: AdminSession) {
+  async function markEval(target: AdminSession) {
     if (target.status !== "ready" || target.evaluation) return;
+    if (!DEMO) {
+      try {
+        const r = await patchAdminSession(target.id, target.version ?? 0, { is_eval_lecture: true }, "평가용 강연 지정");
+        setList((l) => l.map((s) => (s.id === target.id ? { ...s, evaluation: true, version: r.version } : s)));
+      } catch (e) {
+        return toast.show(adminErrorMessage(e), "coral");
+      }
+      return toast.show("평가용 강연으로 표시했어요. 처리 로그를 평가셋으로 따로 모아요", "mint");
+    }
     setList((l) => l.map((s) => (s.id === target.id ? { ...s, evaluation: true } : s)));
     toast.show("평가용 강연으로 표시했어요. 처리 로그를 평가셋으로 따로 모아요", "mint");
   }
@@ -50,7 +106,9 @@ export default function AdminSessions() {
       />
 
       <Panel className="mt-4">
-        {shown.length === 0 ? (
+        {loading ? (
+          <p className="py-10 text-center text-sm text-muted">불러오는 중…</p>
+        ) : shown.length === 0 ? (
           <Empty title="해당하는 강연이 없어요" />
         ) : (
           <div className="-mx-5 overflow-x-auto px-5">
@@ -121,11 +179,16 @@ export default function AdminSessions() {
         <p className="mt-2 text-sm leading-relaxed text-muted">
           강연자가 종료한 것과 같이 처리돼요. 질문 접수가 마감되고 QR · 입장 링크가 꺼지며, 강연자와 청중 {target?.audience ?? 0}명에게 종료 안내가 가요.
         </p>
+        <div className="mt-4">
+          <Field label="종료 사유 (감사 기록에 남아요)">
+            <textarea className={`${inputCls} h-20 resize-none`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="예: 부적절한 내용으로 신고 접수" />
+          </Field>
+        </div>
         <div className="mt-6 flex gap-2">
           <Button variant="soft" className="flex-1" onClick={() => setTarget(null)}>
             취소
           </Button>
-          <Button variant="danger" className="flex-1" onClick={forceEnd}>
+          <Button variant="danger" className="flex-1" disabled={!reason.trim() || busy} onClick={forceEnd}>
             강제 종료
           </Button>
         </div>
