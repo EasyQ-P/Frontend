@@ -1,7 +1,8 @@
 // 질문 화면 도우미: 서버 질문 · 인용을 화면 모양으로 바꾸고, 오류 코드를 안내 문구로 바꾼다
 import { ApiError, UNREACHABLE_MESSAGE, isUnreachable } from "./api/client";
 import type { Citation, QuestionPrivate } from "./api/questions";
-import type { Source } from "./mock";
+import type { SummaryContent } from "./api/records";
+import type { Source, SummaryNoteData } from "./mock";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -57,4 +58,14 @@ export function questionErrorMessage(e: unknown) {
     default:
       return "잠시 후 다시 시도해 주세요.";
   }
+}
+
+/** 요약 노트 응답 → 화면의 요약 노트 4구역 */
+export function summaryToNote(c: SummaryContent): SummaryNoteData {
+  return {
+    headline: c.one_line,
+    concepts: c.key_concepts.map((k) => (k.description ? `${k.term}: ${k.description}` : k.term)),
+    emphasis: c.emphases,
+    keywords: c.keywords,
+  };
 }

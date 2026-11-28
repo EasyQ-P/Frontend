@@ -5,12 +5,20 @@ import { useEffect, useState } from "react";
 import { Sticker } from "@/components/Brand";
 import { Icon } from "@/components/Icon";
 import { EndReasonPill, TeachingFiles } from "@/components/lecture";
+import { RemoteLectureReport } from "@/components/remote/LectureReport";
 import { SummaryNote } from "@/components/SummaryNote";
 import { Button, Empty, Modal, Screen, StatusPill, Tabs, TopBar } from "@/components/ui";
+import { DEMO } from "@/lib/demo";
 import { archive, findLecture, reactStateNote, tcpNote, logStats, pageCounts, questionLogs, transformerNote } from "@/lib/mock";
 import { setDemo, useDemo } from "@/lib/store";
 
-export default function Report() {
+// 데모는 목업 리포트, 실제 API는 요약 노트 · 통계 · 공개 질문을 불러온다
+export default function ReportPage() {
+  const { id } = useParams<{ id: string }>();
+  return DEMO ? <Report /> : <RemoteLectureReport id={id} />;
+}
+
+function Report() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const lecture = findLecture(id);
