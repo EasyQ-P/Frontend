@@ -56,7 +56,8 @@ export const dailyMetrics = [
 
 // ── F9-2 회원 관리 ────────────────────────────────
 
-export type MemberStatus = "active" | "suspended" | "unverified";
+// deleting: 탈퇴 처리 중 (실제 API)
+export type MemberStatus = "active" | "suspended" | "unverified" | "deleting";
 
 export type Member = {
   id: string;
@@ -67,6 +68,7 @@ export type Member = {
   questionCount: number; // 질문 수 (question_count)
   status: MemberStatus;
   suspensionReason?: string; // suspension_reason
+  admin?: boolean; // 관리자 계정
 };
 
 export const members: Member[] = [
@@ -96,6 +98,8 @@ export type AdminSession = {
   // 평가용 강연: 처리 로그를 평가셋으로 따로 모은다. 시작 전에만 바꿀 수 있다
   evaluation?: boolean;
   endReason?: EndReason;
+  // 실제 API: 강제 종료 · 평가용 표시에 보내는 강연 version (If-Match)
+  version?: number;
 };
 
 export const adminSessions: AdminSession[] = [
@@ -369,3 +373,39 @@ export const adminInquiries = [
   { id: "i2", title: "지난 강연을 복사해서 새로 만들 수 있나요?", from: "김서연", date: "2026.10.18", body: "매주 같은 교안 구성으로 강연을 여는데, 용어 사전까지 다시 만들어야 해서 번거로워요." },
   { id: "i3", title: "AI 답변이 교안과 다른 말을 해요", from: "오세훈", date: "2026.10.21", body: "마케팅 믹스 강연에서 4P 설명이 교안 정의와 조금 달랐어요. 철회는 했는데 다른 청중도 봤을까 걱정돼요." },
 ];
+
+// ── 실제 API 응답 → 관리자 화면 모양 ───────────────
+
+export function userToMember(u: import("./api/admin").AdminUser): Member {
+  const status: MemberStatus = u.status === "SUSPENDED" ? "suspended" : u.status === "PENDING_VERIFICATION" ? "unverified" : u.status === "DELETING" ? "deleting" : "active";
+  const d = new Date(u.created_at);
+  return {
+    id: u.user_id,
+    name: u.display_name,
+    email: u.email,
+    joined: `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`,
+    joinedCount: u.joined_count,
+    questionCount: u.question_count,
+    status,
+    suspensionReason: u.suspension_reason ?? undefined,
+    admin: u.role === "ADMIN",
+  };
+}
+
+export function sessionToAdmin(s: import("./api/admin").AdminSession): AdminSession {
+  const at = new Date(s.started_at ?? s.scheduled_at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    id: s.session_id,
+    title: s.title,
+    speaker: s.host_display_name,
+    status: s.status === "DRAFT" ? "ready" : s.status === "LIVE" ? "live" : "ended",
+    date: `${at.getFullYear()}.${pad(at.getMonth() + 1)}.${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`,
+    audience: s.participant_count,
+    questions: s.question_count,
+    code: s.join_code,
+    evaluation: s.is_eval_lecture,
+    endReason: s.end_reason === "ADMIN" ? "admin" : s.end_reason === "AUTO_TIMEOUT" ? "auto" : s.end_reason ? "manual" : undefined,
+    version: s.version,
+  };
+}
