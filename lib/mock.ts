@@ -222,7 +222,8 @@ export function daysSince(date: string) {
 
 // ── 질문 ──────────────────────────────────────────
 
-export type Source = { kind: "slide" | "speech"; label: string; quote: string };
+// chunkId: 실제 API의 근거 조각 ID (원문 보기 API-38). 데모 목업에는 없다
+export type Source = { kind: "slide" | "speech"; label: string; quote: string; chunkId?: string };
 
 export type PublicQuestion = {
   id: string;
