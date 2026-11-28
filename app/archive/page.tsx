@@ -8,6 +8,7 @@ import { Icon } from "@/components/Icon";
 import { Button, Empty, Modal, PageTitle, RoundButton, Screen, inputCls, useToast } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { listJoinedLectures, type JoinedSession } from "@/lib/api/lectures";
+import { requestDeletion } from "@/lib/api/records";
 import { DEMO } from "@/lib/demo";
 import { lectureErrorMessage, sessionToLecture } from "@/lib/lectures";
 import { archive, type ArchiveItem } from "@/lib/mock";
@@ -35,7 +36,26 @@ function RemoteArchive() {
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
+  const [removing, setRemoving] = useState<JoinedSession | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
+
+  // 보관함에서 강연 기록 지우기 (API-40 ARCHIVE). 접수하면 바로 목록에서 빠진다
+  async function remove() {
+    if (!removing) return;
+    setDeleting(true);
+    try {
+      await requestDeletion("ARCHIVE", removing.session_id);
+      const sid = removing.session_id;
+      setLoaded((l) => (l.kind === "ok" ? { ...l, items: l.items.filter((x) => x.session_id !== sid), total: l.total - 1 } : l));
+      toast.show("강연 기록을 지웠어요");
+      setRemoving(null);
+    } catch (e) {
+      toast.show(lectureErrorMessage(e), "coral");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // 검색어가 바뀌면 잠깐 기다렸다가 서버에서 찾는다 (강연명 · 강연자)
   useEffect(() => {
@@ -95,30 +115,55 @@ function RemoteArchive() {
             <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-7 md:grid-cols-3 md:gap-x-6">
               {items.map((s, i) => {
                 const l = sessionToLecture(s);
+                const ended = s.status === "ENDED" || s.status === "PURGED";
                 return (
-                  // 보관함 상세(내 질문 기록 API-12 · 요약 노트 API-37)는 아직 연결 전이라 누르면 안내만 한다
-                  <button key={s.session_id} onClick={() => toast.show("강연 상세 기록은 곧 볼 수 있어요")} className="relative animate-rise text-left" style={{ animationDelay: `${i * 60}ms` }}>
-                    <Folder
-                      tone={l.tone}
-                      title={s.title}
-                      sub={
-                        <>
-                          <p className="truncate">
-                            {s.host_display_name} · {l.date}
-                          </p>
-                          <p className="truncate">
-                            내 질문 {s.my_question_count} · {s.status === "LIVE" ? "진행 중" : s.status === "DRAFT" ? "시작 전" : "요약 노트 준비 중"}
-                          </p>
-                        </>
-                      }
-                      stickers={[l.emoji]}
-                    />
-                  </button>
+                  <div key={s.session_id} className="relative animate-rise" style={{ animationDelay: `${i * 60}ms` }}>
+                    <Link href={`/archive/${s.session_id}`} className="group block">
+                      <Folder
+                        tone={l.tone}
+                        title={s.title}
+                        sub={
+                          <>
+                            <p className="truncate">
+                              {s.host_display_name} · {l.date}
+                            </p>
+                            <p className="truncate">
+                              내 질문 {s.my_question_count} · {s.status === "LIVE" ? "진행 중" : s.status === "DRAFT" ? "시작 전" : "요약 노트 보기"}
+                            </p>
+                          </>
+                        }
+                        stickers={[l.emoji]}
+                      />
+                    </Link>
+                    {/* 보관함 기록은 끝난 강연만 지울 수 있다 (API-40 ARCHIVE) */}
+                    {ended && (
+                      <button
+                        onClick={() => setRemoving(s)}
+                        className="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/60 text-ink/70 hover:bg-white"
+                        aria-label={`${s.title} 강연 삭제`}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
           ))}
       </div>
+
+      <Modal open={!!removing} onClose={() => setRemoving(null)} title="이 강연 기록을 지울까요?">
+        <p className="rounded-2xl bg-white p-3.5 font-bold">{removing?.title}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted">요약 노트와 내 질문 · 필기가 내 보관함에서 지워지고 되돌릴 수 없어요.</p>
+        <div className="mt-6 flex gap-2">
+          <Button variant="soft" className="flex-1" onClick={() => setRemoving(null)}>
+            취소
+          </Button>
+          <Button variant="danger" className="flex-1" disabled={deleting} onClick={remove}>
+            {deleting ? "지우는 중…" : "지우기"}
+          </Button>
+        </div>
+      </Modal>
     </Screen>
   );
 }
